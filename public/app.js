@@ -13,10 +13,26 @@ const TRACKED = ['GBPUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'USDJPY'];
 
 // ---------- SAFE EVENT BINDING ON LOAD ----------
 document.addEventListener('DOMContentLoaded', () => {
-  setupTabs();
-  setupForms();
-  setupScreenshotHandler();
-  checkAuth();
+  // Each setup step is isolated so a failure in one can never block auth
+  // from resolving and revealing a screen to the user.
+  try { setupTabs(); } catch (e) { console.error('setupTabs failed:', e); }
+  try { setupForms(); } catch (e) { console.error('setupForms failed:', e); }
+  try { setupScreenshotHandler(); } catch (e) { console.error('setupScreenshotHandler failed:', e); }
+
+  // Hard failsafe: no matter what goes wrong above or in checkAuth(),
+  // the user is never left staring at a blank page.
+  const failsafeTimer = setTimeout(() => {
+    const auth = document.getElementById('auth-container');
+    const dash = document.getElementById('dashboard-container');
+    const authHidden = auth && auth.classList.contains('hidden');
+    const dashHidden = dash && dash.classList.contains('hidden');
+    if (authHidden && dashHidden) {
+      console.warn('Failsafe triggered: forcing login screen visible.');
+      if (auth) auth.classList.remove('hidden');
+    }
+  }, 12000);
+
+  checkAuth().finally(() => clearTimeout(failsafeTimer));
 });
 
 function setupTabs() {
@@ -47,7 +63,6 @@ function setupForms() {
     tradeForm.addEventListener('submit', submitTrade);
   }
 
-  // Setup filters if present
   const searchInput = document.getElementById('tradeSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -76,11 +91,11 @@ function setupForms() {
 function setupScreenshotHandler() {
   const fileInput = document.getElementById('chartScreenshotInput');
   if (fileInput) {
-    fileInput.addEventListener('change', function(e) {
+    fileInput.addEventListener('change', function (e) {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = function(uploadEvent) {
+      reader.onload = function (uploadEvent) {
         const base64Val = uploadEvent.target.result;
         const hiddenInput = document.getElementById('chartScreenshot');
         if (hiddenInput) hiddenInput.value = base64Val;
@@ -110,22 +125,28 @@ function switchTab(tab) {
   }
 }
 
+// ---------- AUTH CHECK (now with a timeout so it can never hang forever) ----------
 async function checkAuth() {
+  const authContainer = document.getElementById('auth-container');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
   try {
-    const res = await fetch('/api/current-user');
+    const res = await fetch('/api/current-user', { signal: controller.signal });
+    clearTimeout(timeoutId);
     const data = await res.json();
     if (data.success && data.user) {
       currentUser = data.user;
       showDashboard();
-    } else {
-      const authContainer = document.getElementById('auth-container');
-      if (authContainer) authContainer.classList.remove('hidden');
+      return;
     }
   } catch (err) {
-    console.error(err);
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) authContainer.classList.remove('hidden');
+    clearTimeout(timeoutId);
+    console.error('checkAuth failed or timed out:', err);
   }
+
+  // Not authenticated, or the check failed/timed out — either way, show login.
+  if (authContainer) authContainer.classList.remove('hidden');
 }
 
 async function handleLogin(e) {
@@ -141,16 +162,16 @@ async function handleLogin(e) {
 
   try {
     const res = await fetch('/api/login', {
-      method: 'POST', 
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-    if (data.success) { 
-      currentUser = data.user; 
-      showDashboard(); 
-    } else { 
-      if (errorEl) errorEl.innerText = data.message || 'Login failed'; 
+    if (data.success) {
+      currentUser = data.user;
+      showDashboard();
+    } else {
+      if (errorEl) errorEl.innerText = data.message || 'Login failed';
     }
   } catch (err) {
     if (errorEl) errorEl.innerText = 'Network error during login';
@@ -179,28 +200,28 @@ async function handleSignup(e) {
 
   try {
     const res = await fetch('/api/signup', {
-      method: 'POST', 
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, email, password })
     });
     const data = await res.json();
-    if (data.success) { 
-      currentUser = data.user; 
-      showDashboard(); 
-    } else { 
-      if (errorEl) errorEl.innerText = data.message || 'Signup failed'; 
+    if (data.success) {
+      currentUser = data.user;
+      showDashboard();
+    } else {
+      if (errorEl) errorEl.innerText = data.message || 'Signup failed';
     }
   } catch (err) {
     if (errorEl) errorEl.innerText = 'Network error during signup';
   }
 }
 
+// FIXED: your server exposes GET /auth/logout, not POST /api/logout.
 async function logout() {
-  try {
-    await fetch('/api/logout', { method: 'POST' });
-  } catch (err) { console.error(err); }
-  currentUser = null;
-  location.reload();
+  if (marketPollTimer) clearInterval(marketPollTimer);
+  if (tradesPollTimer) clearInterval(tradesPollTimer);
+  if (sessionPollTimer) clearInterval(sessionPollTimer);
+  window.location.href = '/auth/logout';
 }
 
 function showDashboard() {
@@ -222,8 +243,8 @@ function showDashboard() {
   if (tradesPollTimer) clearInterval(tradesPollTimer);
   if (sessionPollTimer) clearInterval(sessionPollTimer);
 
-  marketPollTimer = setInterval(fetchMarket, 15000); 
-  tradesPollTimer = setInterval(loadTrades, 25000);  
+  marketPollTimer = setInterval(fetchMarket, 15000);
+  tradesPollTimer = setInterval(loadTrades, 25000);
   sessionPollTimer = setInterval(updateTradingSessions, 1000);
 }
 
@@ -233,13 +254,13 @@ function updateTradingSessions() {
   const utcSec = now.getUTCSeconds();
   const utcMin = now.getUTCMinutes();
   const utcHours = now.getUTCHours();
-  
+
   let totalSecondsToday = (utcHours * 3600 + utcMin * 60 + utcSec + 3600) % 86400;
-  
+
   const watHours = Math.floor(totalSecondsToday / 3600) % 24;
   const watMins = Math.floor((totalSecondsToday % 3600) / 60);
   const watSecs = totalSecondsToday % 60;
-  
+
   const currentWatDecimal = watHours + (watMins / 60) + (watSecs / 3600);
   const activeSessions = [];
 
@@ -258,9 +279,7 @@ function updateTradingSessions() {
 
   sessionSchedules.forEach(s => {
     let diff = s.startSec - totalSecondsToday;
-    if (diff <= 0) {
-      diff += 86400;
-    }
+    if (diff <= 0) diff += 86400;
     if (diff < minDiffSeconds) {
       minDiffSeconds = diff;
       nextSessionName = s.name;
@@ -358,12 +377,12 @@ function normalizePairKey(raw) {
 }
 
 function updateRunningPrices() {
-  allTrades.forEach((t, i) => {
+  allTrades.forEach((t) => {
     if (t.outcome !== 'Running') return;
     const key = normalizePairKey(t.pair);
     const m = key ? latestMarket[key] : null;
     if (!m || m.price === null || m.price === undefined) return;
-    const el = document.getElementById(`current-price-${i}`);
+    const el = document.getElementById(`current-price-${t._id}`);
     if (el) el.innerText = formatMarketPrice(key, m.price);
   });
 }
@@ -387,13 +406,13 @@ function clearTags() {
 
 // ---------- PROP FIRM RISK GUARDRAILS ----------
 function updatePropGuardrails(tradesList) {
-  const maxDailyRiskDollars = 500; 
+  const maxDailyRiskDollars = 500;
   let totalExposedRisk = 0;
 
   tradesList.forEach(t => {
     if (t.outcome === 'Running' && t.entry && t.stopLoss) {
       const riskPerUnit = Math.abs(Number(t.entry) - Number(t.stopLoss));
-      totalExposedRisk += riskPerUnit * 100; 
+      totalExposedRisk += riskPerUnit * 100;
     }
   });
 
@@ -485,14 +504,15 @@ async function submitTrade(e) {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (data.success) { 
-      if (aiBox) aiBox.innerText = data.text; 
+    if (data.success) {
+      if (aiBox) aiBox.innerText = data.text;
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
       if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
-      loadTrades(); 
+      loadTrades();
+    } else {
+      if (aiBox) aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error');
     }
-    else { if (aiBox) aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
   } catch (err) {
     if (aiBox) aiBox.innerText = "Network error while saving trade: " + err.message;
   }
@@ -528,37 +548,5 @@ async function loadTrades() {
   } else {
     allTrades = [];
     document.getElementById('stat-total').innerText = 0;
-    document.getElementById('stat-winrate').innerText = '0%';
-    document.getElementById('stat-record').innerText = '0W / 0L';
-    document.getElementById('stat-streak').innerText = '—';
-    updatePropGuardrails([]);
-    const listDiv = document.getElementById('trades-list');
-    if (listDiv) listDiv.innerHTML = '<div class="empty-state">No trades journaled yet — log your first setup above.</div>';
-  }
-}
-
-function renderTradesList() {
-  const listDiv = document.getElementById('trades-list');
-  if (!listDiv) return;
-
-  let filtered = allTrades.filter(t => {
-    const matchesSearch = !currentSearchQuery || 
-      (t.pair && t.pair.toLowerCase().includes(currentSearchQuery)) || 
-      (t.notes && t.notes.toLowerCase().includes(currentSearchQuery));
-    
-    const matchesOutcome = currentOutcomeFilter === 'All' || t.outcome === currentOutcomeFilter;
-    const matchesSession = currentSessionFilter === 'All' || t.session === currentSessionFilter;
-
-    return matchesSearch && matchesOutcome && matchesSession;
-  });
-
-  if (filtered.length === 0) {
-    listDiv.innerHTML = '<div class="empty-state">No matching trades found.</div>';
-    return;
-  }
-
-  listDiv.innerHTML = filtered.map((t) => {
-    const originalIndex = allTrades.indexOf(t);
-    const isRunning = t.outcome === 'Running';
-    const key = normalizePairKey(t.pair);
-    const currentMktPrice = key && latestMarket[key] && la
+    document.getElementById('stat-winrate').innerText = '0.0%';
+    document.getElementById

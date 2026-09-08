@@ -175,6 +175,11 @@
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
 
+    <!-- TRADING DISCIPLINE & RULE BANNER -->
+    <div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.2); padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-family: 'Inter', sans-serif; font-size: 0.85rem; color: #facc15;">
+      🧠 <b>Core Discipline:</b> Protect capital first. Respect your 5% max daily guardrail and stick to your technical structure.
+    </div>
+
     <div class="stats-grid">
       <div class="stat-card" style="--stat-color: var(--accent);">
         <h4>Total trades</h4>
@@ -272,7 +277,7 @@
     <div class="panel">
       <h3>Log & analyze new trade</h3>
       <p class="panel-sub">Save a setup and get an instant critique from your AI mentor.</p>
-      <form onsubmit="submitTrade(event)">
+      <form id="trade-form" onsubmit="submitTrade(event)">
         <div class="form-grid">
           <div class="form-group">
             <label>Currency pair</label>
