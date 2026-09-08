@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mama Vero Shop — Quality African Foodstuff</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="navbar-mount"></div>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <h1>Quality African Foodstuff, Conveniently Available.</h1>
+      <p>Egusi, ogbono, crayfish, garri, rice and more — sourced fresh and ready for pickup. Order online, pay by bank transfer, and we'll have it ready for you.</p>
+      <div class="flex gap-1">
+        <a href="#shop" class="btn btn-primary">Shop Now</a>
+        <a href="signup.html" class="btn btn-outline">Create an Account</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="stat"><span>🌾 Fresh Stock Daily</span><b>Updated Live</b></div>
+      <div class="stat"><span>🏦 Bank Transfer Payment</span><b>Simple &amp; Secure</b></div>
+      <div class="stat"><span>📦 Order Tracking</span><b>Real-Time Status</b></div>
+      <div class="stat"><span>🛍️ Pickup Ready</span><b>No Delivery Hassle</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="section container" id="shop">
+  <h2 class="section-title">Featured Products</h2>
+  <p class="section-subtitle">Browse our current stock. Prices and availability update in real time.</p>
+
+  <div class="flex gap-1 mb-3" style="flex-wrap: wrap;">
+    <input id="search-input" class="form-control" style="max-width: 260px;" placeholder="Search products (e.g. Egusi)">
+    <select id="category-filter" class="form-control" style="max-width: 180px;">
+      <option value="">All Categories</option>
+    </select>
+    <select id="sort-select" class="form-control" style="max-width: 200px;">
+      <option value="">Sort: Newest</option>
+      <option value="price_asc">Price: Low to High</option>
+      <option value="price_desc">Price: High to Low</option>
+      <option value="name">Name: A-Z</option>
+      <option value="availability">Availability</option>
+    </select>
+  </div>
+
+  <div id="product-grid" class="grid"></div>
+</section>
+
+<section class="section container">
+  <h2 class="section-title">Product Categories</h2>
+  <div id="category-pills" class="flex gap-1" style="flex-wrap: wrap;"></div>
+</section>
+
+<section class="section" style="background: var(--color-surface);">
+  <div class="container">
+    <h2 class="section-title">Why Choose Mama Vero Shop?</h2>
+    <div class="grid">
+      <div class="card feature-card">
+        <div class="icon">✅</div>
+        <h3>Genuine Quality</h3>
+        <p>Every item is checked for freshness before it's listed.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">💳</div>
+        <h3>Simple Payment</h3>
+        <p>Pay by bank transfer and upload your proof in seconds.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">📦</div>
+        <h3>Live Stock</h3>
+        <p>What you see is what's actually available — no surprises.</p>
+      </div>
+      <div class="card feature-card">
+        <div class="icon">🔔</div>
+        <h3>Order Tracking</h3>
+        <p>Follow your order from placed to ready-for-pickup.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section container">
+  <h2 class="section-title">How Ordering Works</h2>
+  <div class="grid">
+    <div class="card feature-card"><div class="icon">1️⃣</div><h3>Create an Account</h3><p>Sign up manually or continue with Google.</p></div>
+    <div class="card feature-card"><div class="icon">2️⃣</div><h3>Add to Cart</h3><p>Browse products and add what you need.</p></div>
+    <div class="card feature-card"><div class="icon">3️⃣</div><h3>Pay by Transfer</h3><p>Send payment and upload your proof of transfer.</p></div>
+    <div class="card feature-card"><div class="icon">4️⃣</div><h3>Pickup</h3><p>We verify your payment and prepare your order.</p></div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--color-primary-light);">
+  <div class="container text-center">
+    <h2 class="section-title">Visit or Contact Us</h2>
+    <p class="section-subtitle" style="margin-left:auto;margin-right:auto;">Have a question about an order or a product? Sign in to your account and reach out via your order details page, or contact the shop directly.</p>
+  </div>
+</section>
+
+<div id="footer-mount"></div>
+
+<script src="js/app.js"></script>
+<script>
+  let allProducts = [];
+
+  async function loadCategories() {
+    try {
+      const { categories } = await apiFetch('/products/categories');
+      const select = document.getElementById('category-filter');
+      const pills = document.getElementById('category-pills');
+      categories.forEach((c) => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        select.appendChild(opt);
+
+        const pill = document.createElement('span');
+        pill.className = 'category-pill';
+        pill.style.cursor = 'pointer';
+        pill.textContent = c;
+        pill.addEventListener('click', () => { select.value = c; loadProducts(); window.location.hash = 'shop'; });
+        pills.appendChild(pill);
+      });
+    } catch (e) { /* silent */ }
+  }
+
+  function renderProducts(products) {
+    const grid = document.getElementById('product-grid');
+    if (!products.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><div class="icon">🛒</div><h3>No products found.</h3><p>Try a different search or category.</p></div>`;
+      return;
+    }
+    grid.innerHTML = products.map((p) => {
+      const stock = stockStatusLabel(p);
+      const disabled = p.stockQuantity <= 0 || !p.isAvailable;
+      return `
+        <div class="card product-card">
+          <div class="product-image">${p.image ? `<img src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}">` : '🥫'}</div>
+          <div class="product-body">
+            <span class="category-pill">${escapeHtml(p.category)}</span>
+            <div class="product-name">${escapeHtml(p.name)}</div>
+            <div class="product-desc">${escapeHtml(p.description || '')}</div>
+            <div class="product-price">${formatNaira(p.price)}</div>
+            <div class="product-stock ${stock.cls}">${stock.text}${p.stockQuantity > 0 ? ` · Available: ${p.stockQuantity}` : ''}</div>
+            <div class="product-footer">
+              <button class="btn btn-primary btn-block btn-sm add-to-cart-btn" data-id="${p._id}" ${disabled ? 'disabled' : ''}>
+                ${disabled ? 'Out of Stock' : 'Add to Cart'}
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.querySelectorAll('.add-to-cart-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const product = allProducts.find((p) => p._id === btn.dataset.id);
+        if (product) {
+          addToCart(product, 1);
+          showToast(`${product.name} added to cart.`, 'success');
+        }
+      });
+    });
+  }
+
+  async function loadProducts() {
+    const grid = document.getElementById('product-grid');
+    grid.innerHTML = Array(4).fill('<div class="card" style="height:280px;" class="skeleton"></div>').join('');
+    const search = document.getElementById('search-input').value.trim();
+    const category = document.getElementById('category-filter').value;
+    const sort = document.getElementById('sort-select').value;
+
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category) params.set('category', category);
+    if (sort) params.set('sort', sort);
+
+    try {
+      const { products } = await apiFetch('/products?' + params.toString());
+      allProducts = products;
+      renderProducts(products);
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><h3>Could not load products.</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  document.getElementById('search-input').addEventListener('input', debounce(loadProducts, 350));
+  document.getElementById('category-filter').addEventListener('change', loadProducts);
+  document.getElementById('sort-select').addEventListener('change', loadProducts);
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  renderNavbar('shop');
+  renderFooter();
+  loadCategories();
+  loadProducts();
+</script>
+</body>
+</html>

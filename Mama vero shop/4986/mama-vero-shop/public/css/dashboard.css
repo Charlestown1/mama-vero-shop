@@ -1,0 +1,19 @@
+.dash-hero {
+  background: var(--color-primary-light);
+  padding: 34px 0;
+}
+.dash-hero h1 { font-size: 1.6rem; color: var(--color-primary-dark); }
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+.dash-stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.dash-stat-card .num { font-size: 1.6rem; font-weight: 800; color: var(--color-primary-dark); }
+.dash-stat-card .label { font-size: 0.82rem; color: var(--color-text-light); }

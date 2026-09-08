@@ -1,0 +1,5 @@
+.order-card { padding: 20px; margin-bottom: 16px; }
+.order-card .top-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.order-card .order-num { font-weight: 800; color: var(--color-primary-dark); }
+.order-card .meta { font-size: 0.82rem; color: var(--color-text-light); }
+.order-items-preview { font-size: 0.88rem; color: var(--color-text-light); margin-bottom: 12px; }

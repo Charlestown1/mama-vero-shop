@@ -1,0 +1,26 @@
+.checkout-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 30px; align-items: start; }
+@media (max-width: 850px) { .checkout-grid { grid-template-columns: 1fr; } }
+.order-line { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed var(--color-border); font-size: 0.92rem; }
+.bank-box { background: var(--color-primary-light); border-radius: var(--radius-md); padding: 20px; margin: 18px 0; }
+.bank-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.92rem; }
+.bank-row b { color: var(--color-primary-dark); }
+.upload-box {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 26px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.upload-box:hover { border-color: var(--color-primary); }
+.upload-box.has-file { border-color: var(--color-success); }
+.progress-steps { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+.progress-step { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 24px; position: relative; }
+.progress-step:not(:last-child)::before {
+  content: ''; position: absolute; left: 11px; top: 26px; bottom: 0; width: 2px; background: var(--color-border);
+}
+.progress-step .dot { width: 24px; height: 24px; border-radius: 50%; background: var(--color-border); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; }
+.progress-step.done .dot { background: var(--color-success); }
+.progress-step.active .dot { background: var(--color-primary); }
+.progress-step .label { font-weight: 700; font-size: 0.92rem; }
+.progress-step .sub { font-size: 0.8rem; color: var(--color-text-light); }
