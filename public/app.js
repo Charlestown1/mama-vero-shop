@@ -150,6 +150,62 @@ function updateRunningPrices() {
   });
 }
 
+// ---------- FEATURE 1: SETUP & STRATEGY TAGGING ----------
+function toggleTag(element) {
+  element.classList.toggle('active');
+}
+
+function getSelectedTags() {
+  const pills = document.querySelectorAll('.strategy-pill.active');
+  const tags = [];
+  pills.forEach(p => tags.push(p.innerText.trim()));
+  return tags;
+}
+
+function clearTags() {
+  const pills = document.querySelectorAll('.strategy-pill');
+  pills.forEach(p => p.classList.remove('active'));
+}
+
+// ---------- FEATURE 2: PROP FIRM RISK & DRAWDOWN GUARDRAILS ----------
+function updatePropGuardrails(tradesList) {
+  const maxDailyRiskDollars = 500; // Standard evaluation baseline limit
+  let totalExposedRisk = 0;
+
+  tradesList.forEach(t => {
+    if (t.outcome === 'Running' && t.entry && t.stopLoss) {
+      const riskPerUnit = Math.abs(Number(t.entry) - Number(t.stopLoss));
+      totalExposedRisk += riskPerUnit * 100; // Estimated unit sizing mapping
+    }
+  });
+
+  const riskPercentageUsed = Math.min(100, Math.max(0, (totalExposedRisk / maxDailyRiskDollars) * 100));
+  const bufferRemaining = Math.max(0, 100 - riskPercentageUsed).toFixed(1);
+
+  const statusText = document.getElementById('guardrail-status-text');
+  const barFill = document.getElementById('guardrail-bar');
+  const pctDisplay = document.getElementById('guardrail-pct');
+
+  if (!statusText || !barFill || !pctDisplay) return;
+
+  if (riskPercentageUsed > 80) {
+    statusText.innerText = `⚠️ High Risk Exposure (${riskPercentageUsed.toFixed(1)}% of limit!)`;
+    statusText.style.color = 'var(--loss)';
+    barFill.style.background = 'var(--loss)';
+  } else if (riskPercentageUsed > 40) {
+    statusText.innerText = `Moderate Exposure (${riskPercentageUsed.toFixed(1)}% utilized)`;
+    statusText.style.color = 'var(--accent)';
+    barFill.style.background = 'var(--accent)';
+  } else {
+    statusText.innerText = `Safe zone (${riskPercentageUsed.toFixed(1)}% risk exposed)`;
+    statusText.style.color = 'var(--win)';
+    barFill.style.background = 'var(--win)';
+  }
+
+  barFill.style.width = `${bufferRemaining}%`;
+  pctDisplay.innerText = `${bufferRemaining}% Buffer`;
+}
+
 // ---------- TRADE SUBMISSION ----------
 async function submitTrade(e) {
   e.preventDefault();
@@ -161,7 +217,9 @@ async function submitTrade(e) {
     stopLoss: document.getElementById('stopLoss').value,
     takeProfit: document.getElementById('takeProfit').value,
     tradeOutcome: document.getElementById('tradeOutcome').value,
-    tradeNotes: document.getElementById('tradeNotes').value
+    tradeNotes: document.getElementById('tradeNotes').value,
+    tags: getSelectedTags(),                                                                  // Feature 1
+    chartScreenshot: document.getElementById('chartScreenshot') ? document.getElementById('chartScreenshot').value.trim() : null // Feature 3
   };
 
   const aiBox = document.getElementById('ai-result');
@@ -174,7 +232,12 @@ async function submitTrade(e) {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (data.success) { aiBox.innerText = data.text; loadTrades(); }
+    if (data.success) { 
+      aiBox.innerText = data.text; 
+      clearTags();
+      if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
+      loadTrades(); 
+    }
     else { aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
   } catch (err) {
     aiBox.innerText = "Network error while saving trade: " + err.message;
@@ -201,6 +264,9 @@ async function loadTrades() {
     document.getElementById('stat-winrate').innerText = winRate + '%';
     document.getElementById('stat-record').innerText = `${wins}W / ${losses}L`;
     document.getElementById('stat-streak').innerText = computeStreak(allTrades);
+
+    // Update Prop Firm Risk Guardrail visual
+    updatePropGuardrails(allTrades);
 
     listDiv.innerHTML = allTrades.map((t, i) => {
       const isRunning = t.outcome === 'Running';
@@ -233,6 +299,7 @@ async function loadTrades() {
     document.getElementById('stat-winrate').innerText = '0%';
     document.getElementById('stat-record').innerText = '0W / 0L';
     document.getElementById('stat-streak').innerText = '—';
+    updatePropGuardrails([]);
     listDiv.innerHTML = '<div class="empty-state">No trades journaled yet — log your first setup above.</div>';
   }
 }
@@ -289,6 +356,31 @@ function openModal(index) {
   document.getElementById('modal-tp').innerText = fmt(t.takeProfit);
   document.getElementById('modal-date').innerText = formatDate(t.createdAt);
   document.getElementById('modal-notes').innerText = t.notes && t.notes.trim() ? t.notes : 'No notes recorded.';
+
+  // Feature 1: Render Strategy Tags in Modal
+  const tagsContainer = document.getElementById('modal-tags-container');
+  if (tagsContainer) {
+    if (t.tags && t.tags.length > 0) {
+      tagsContainer.innerHTML = `<div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:6px;">Setup Tags</div><div class="strategy-pills">${t.tags.map(tag => `<div class="strategy-pill active" style="cursor:default;">${escapeHtml(tag)}</div>`).join('')}</div>`;
+    } else {
+      tagsContainer.innerHTML = '';
+    }
+  }
+
+  // Feature 3: Render Chart Screenshot in Modal
+  const screenshotContainer = document.getElementById('modal-screenshot-container');
+  if (screenshotContainer) {
+    if (t.chartScreenshot) {
+      screenshotContainer.innerHTML = `
+        <div class="modal-field-label" style="margin-top:12px;">Chart Screenshot Attachment</div>
+        <a href="${escapeHtml(t.chartScreenshot)}" target="_blank">
+          <img src="${escapeHtml(t.chartScreenshot)}" class="screenshot-preview" alt="Chart Setup Screenshot">
+        </a>
+      `;
+    } else {
+      screenshotContainer.innerHTML = '';
+    }
+  }
 
   const currentWrap = document.getElementById('modal-current-wrap');
   const reasonWrap = document.getElementById('modal-reason-wrap');

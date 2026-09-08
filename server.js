@@ -68,6 +68,8 @@ const tradeSchema = new mongoose.Schema({
   takeProfit: Number,
   outcome: { type: String, default: 'Running' }, // 'Win' | 'Loss' | 'BreakEven' | 'Running'
   notes: String,
+  tags: { type: [String], default: [] },               // Feature 1: Strategy Tagging
+  chartScreenshot: { type: String, default: null },    // Feature 3: Chart Screenshot Attachment
   exitReason: { type: String, default: null }, // 'Take Profit' | 'Stop Loss' | 'Manual'
   currentPrice: { type: Number, default: null },
   lastPriceUpdate: { type: Date, default: null },
@@ -79,7 +81,6 @@ const tradeSchema = new mongoose.Schema({
 const Trade = mongoose.model('Trade', tradeSchema);
 
 // One-time safe migration: attach userId to legacy trades that only have `username`.
-// Existing data is never deleted; trades we can't confidently match are left as-is.
 async function migrateLegacyTrades() {
   const legacy = await Trade.find({ userId: { $exists: false } });
   if (!legacy.length) return;
@@ -150,9 +151,7 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // ============================================================
-// AUTH MIDDLEWARE — this is what makes trade data secure.
-// Every trade route below trusts ONLY req.user._id, never anything
-// the frontend sends (no username in body/URL is ever used for lookups).
+// AUTH MIDDLEWARE
 // ============================================================
 function requireAuth(req, res, next) {
   if (req.isAuthenticated && req.isAuthenticated()) return next();
@@ -170,11 +169,10 @@ const TRACKED_SYMBOLS = {
   USDJPY: { td: 'USD/JPY', label: 'USDJPY' }
 };
 
-const marketCache = {}; // { GBPUSD: { symbol, price, change, percentChange, updatedAt, status } }
+const marketCache = {}; 
 let marketFailCount = 0;
-const POLL_INTERVAL_MS = parseInt(process.env.MARKET_POLL_INTERVAL_MS, 10) || 300000; // 5 min default
+const POLL_INTERVAL_MS = parseInt(process.env.MARKET_POLL_INTERVAL_MS, 10) || 300000; 
 
-// Normalizes user-entered pair text ("GBP/USD", "gbpusd", "GOLD") to one of our tracked keys.
 function normalizePairKey(raw) {
   if (!raw) return null;
   let k = String(raw).toUpperCase().replace(/[^A-Z]/g, '');
@@ -185,7 +183,6 @@ function normalizePairKey(raw) {
 
 async function fetchMarketData() {
   if (!process.env.TWELVE_DATA_API_KEY) {
-    // No key configured — mark everything offline instead of crashing or faking data.
     for (const key of Object.keys(TRACKED_SYMBOLS)) {
       marketCache[key] = marketCache[key] || { symbol: TRACKED_SYMBOLS[key].label, price: null, change: null, percentChange: null, updatedAt: null, status: 'offline' };
     }
@@ -198,8 +195,6 @@ async function fetchMarketData() {
   try {
     const res = await fetch(url);
     const data = await res.json();
-
-    // With a single symbol Twelve Data returns a flat object; with multiple it's keyed by symbol.
     const entries = data.symbol ? { [data.symbol]: data } : data;
 
     let anySuccess = false;
@@ -237,17 +232,12 @@ async function fetchMarketData() {
   await monitorRunningTrades();
 }
 
-// Server-side TP/SL monitoring. Runs independently of any open browser tab.
-// LIMITATION: only prices at each poll are known — if price gapped through a level
-// and back between polls, that intra-interval touch cannot be detected or reconstructed.
-// LIMITATION: only a single last-trade price is available (no bid/ask on the free plan),
-// so the same price is used to evaluate both Buy and Sell trades.
 async function monitorRunningTrades() {
   try {
     const runningTrades = await Trade.find({ outcome: 'Running' });
     for (const trade of runningTrades) {
       const key = normalizePairKey(trade.pair);
-      if (!key || !marketCache[key] || marketCache[key].price === null) continue; // pair not tracked, skip
+      if (!key || !marketCache[key] || marketCache[key].price === null) continue;
 
       const current = marketCache[key].price;
       trade.currentPrice = current;
@@ -284,7 +274,7 @@ async function monitorRunningTrades() {
   }
 }
 
-fetchMarketData(); // run once on boot
+fetchMarketData();
 setInterval(fetchMarketData, POLL_INTERVAL_MS);
 
 app.get('/api/market', (req, res) => {
@@ -369,8 +359,7 @@ app.get('/auth/google/callback',
 );
 
 // ============================================================
-// TRADE ROUTES — all scoped to req.user._id, never to any
-// username/id supplied by the client.
+// TRADE ROUTES
 // ============================================================
 app.get('/api/trades', requireAuth, async (req, res) => {
   try {
@@ -395,7 +384,7 @@ function computeRiskReward(direction, entry, sl, tp) {
 app.post('/api/analyze', requireAuth, async (req, res) => {
   let savedTrade;
   try {
-    const { currencyPair, tradeDirection, entryPrice, exitPrice, stopLoss, takeProfit, tradeOutcome, tradeNotes } = req.body;
+    const { currencyPair, tradeDirection, entryPrice, exitPrice, stopLoss, takeProfit, tradeOutcome, tradeNotes, tags, chartScreenshot } = req.body;
 
     if (!currencyPair || !tradeDirection || !entryPrice) {
       return res.status(400).json({ success: false, message: 'Pair, direction, and entry price are required.' });
@@ -414,6 +403,8 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
       takeProfit: takeProfit !== '' && takeProfit !== undefined ? parseFloat(takeProfit) : undefined,
       outcome: tradeOutcome || 'Running',
       notes: tradeNotes,
+      tags: Array.isArray(tags) ? tags : [],
+      chartScreenshot: chartScreenshot || null,
       exitReason: tradeOutcome === 'Win' || tradeOutcome === 'Loss' ? 'Manual' : null,
       marketSymbol: key,
       priceSource: key ? 'Twelve Data' : null,
@@ -423,12 +414,13 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
     return res.status(500).json({ success: false, message: 'Could not save trade: ' + err.message });
   }
 
-  // Trade is safely saved regardless of what happens with the AI mentor below.
   try {
     const rr = computeRiskReward(savedTrade.direction, savedTrade.entry, savedTrade.stopLoss, savedTrade.takeProfit);
     const rrLine = rr
       ? `Risk: ${rr.risk.toFixed(5)} | Potential reward: ${rr.reward.toFixed(5)} | Approximate R:R = 1:${rr.ratio.toFixed(2)}`
       : 'Risk/reward could not be calculated (missing stop loss or take profit).';
+
+    const tagsLine = savedTrade.tags && savedTrade.tags.length > 0 ? savedTrade.tags.join(', ') : 'None';
 
     const prompt = `You are an elite forex/crypto trading mentor. Analyze this trade using ONLY the information given — do not invent details.
 
@@ -439,10 +431,11 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
 - Stop Loss: ${savedTrade.stopLoss ?? 'Not set'}
 - Take Profit: ${savedTrade.takeProfit ?? 'Not set'}
 - Outcome: ${savedTrade.outcome}
+- Strategy Tags: ${tagsLine}
 - ${rrLine}
 - Trader's Thesis/Notes: "${savedTrade.notes || 'None provided'}"
 
-Give a professional critique covering: logical consistency of the setup, whether the stop/target placement matches the thesis, potential weaknesses, and 2-3 concrete lessons. Be direct and concise.`;
+Give a professional critique covering: logical consistency of the setup, evaluation of the strategy tags used, whether the stop/target placement matches the thesis, potential weaknesses, and 2-3 concrete lessons. Be direct and concise.`;
 
     const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const result = await model.generateContent(prompt);
