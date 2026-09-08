@@ -117,8 +117,15 @@ async function checkAuth() {
     if (data.success && data.user) {
       currentUser = data.user;
       showDashboard();
+    } else {
+      const authContainer = document.getElementById('auth-container');
+      if (authContainer) authContainer.classList.remove('hidden');
     }
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+    const authContainer = document.getElementById('auth-container');
+    if (authContainer) authContainer.classList.remove('hidden');
+  }
 }
 
 async function handleLogin(e) {
@@ -217,19 +224,16 @@ function showDashboard() {
 
   marketPollTimer = setInterval(fetchMarket, 15000); 
   tradesPollTimer = setInterval(loadTrades, 25000);  
-  sessionPollTimer = setInterval(updateTradingSessions, 1000); // 1-second countdown ticker
+  sessionPollTimer = setInterval(updateTradingSessions, 1000);
 }
 
 // ---------- LIVE FOREX SESSION, WAT CLOCK & COUNTDOWN ----------
 function updateTradingSessions() {
   const now = new Date();
-  
-  // Get UTC components
   const utcSec = now.getUTCSeconds();
   const utcMin = now.getUTCMinutes();
   const utcHours = now.getUTCHours();
   
-  // Convert to West Africa Time (WAT = UTC+1). Total seconds from midnight WAT:
   let totalSecondsToday = (utcHours * 3600 + utcMin * 60 + utcSec + 3600) % 86400;
   
   const watHours = Math.floor(totalSecondsToday / 3600) % 24;
@@ -239,15 +243,10 @@ function updateTradingSessions() {
   const currentWatDecimal = watHours + (watMins / 60) + (watSecs / 3600);
   const activeSessions = [];
 
-  // Session hours in WAT:
-  // 1. Asian (Tokyo): 01:00 - 10:00 WAT
-  // 2. London: 09:00 - 17:00 WAT
-  // 3. New York: 14:00 - 22:00 WAT
   if (currentWatDecimal >= 1 && currentWatDecimal < 10) activeSessions.push("🇯🇵 Asian");
   if (currentWatDecimal >= 9 && currentWatDecimal < 17) activeSessions.push("🇬🇧 London");
   if (currentWatDecimal >= 14 && currentWatDecimal < 22) activeSessions.push("🇺🇸 New York");
 
-  // Session start times in seconds from midnight WAT
   const sessionSchedules = [
     { name: "🇯🇵 Asian", startSec: 1 * 3600 },
     { name: "🇬🇧 London", startSec: 9 * 3600 },
@@ -260,7 +259,7 @@ function updateTradingSessions() {
   sessionSchedules.forEach(s => {
     let diff = s.startSec - totalSecondsToday;
     if (diff <= 0) {
-      diff += 86400; // If it already started today, countdown targets tomorrow's opening
+      diff += 86400;
     }
     if (diff < minDiffSeconds) {
       minDiffSeconds = diff;
@@ -272,7 +271,6 @@ function updateTradingSessions() {
   const cMins = Math.floor((minDiffSeconds % 3600) / 60);
   const cSecs = minDiffSeconds % 60;
 
-  // Update DOM elements
   const timeEl = document.getElementById('wat-time-display');
   const sessionEl = document.getElementById('active-session-display');
   const countdownEl = document.getElementById('session-countdown');
@@ -283,7 +281,7 @@ function updateTradingSessions() {
 
   if (sessionEl) {
     if (activeSessions.length > 0) {
-      sessionEl.innerHTML = activeSessions.map(s => `<span style="background: rgba(243, 156, 18, 0.15); color: var(--accent); padding: 3px 8px; border-radius: 4px; margin-right: 6px; display:inline-block;">${s}</span>`).join(' ');
+      sessionEl.innerHTML = activeSessions.map(s => `<span style="background: rgba(234, 179, 8, 0.15); color: var(--accent); padding: 3px 8px; border-radius: 4px; margin-right: 6px; display:inline-block;">${s}</span>`).join(' ');
     } else {
       sessionEl.innerHTML = `<span style="color: var(--text-muted);">💤 Inter-session / Market Quiet</span>`;
     }
@@ -326,8 +324,10 @@ async function fetchMarket() {
       }
 
       const status = (m && m.status) || 'offline';
-      statusEl.className = 'market-status ' + status;
-      statusEl.innerHTML = `<span class="dot"></span>${status.toUpperCase()}`;
+      if (statusEl) {
+        statusEl.className = 'market-status ' + status;
+        statusEl.innerHTML = `<span class="dot"></span>${status.toUpperCase()}`;
+      }
     });
 
     const updatedEl = document.getElementById('market-updated');
@@ -408,16 +408,16 @@ function updatePropGuardrails(tradesList) {
 
   if (riskPercentageUsed > 80) {
     statusText.innerText = `⚠️ High Risk Exposure (${riskPercentageUsed.toFixed(1)}% of limit!)`;
-    statusText.style.color = 'var(--loss)';
-    barFill.style.background = 'var(--loss)';
+    statusText.style.color = 'var(--loss, #ef4444)';
+    barFill.style.background = 'var(--loss, #ef4444)';
   } else if (riskPercentageUsed > 40) {
     statusText.innerText = `Moderate Exposure (${riskPercentageUsed.toFixed(1)}% utilized)`;
-    statusText.style.color = 'var(--accent)';
-    barFill.style.background = 'var(--accent)';
+    statusText.style.color = 'var(--accent, #eab308)';
+    barFill.style.background = 'var(--accent, #eab308)';
   } else {
     statusText.innerText = `Safe zone (${riskPercentageUsed.toFixed(1)}% risk exposed)`;
-    statusText.style.color = 'var(--win)';
-    barFill.style.background = 'var(--win)';
+    statusText.style.color = 'var(--win, #22c55e)';
+    barFill.style.background = 'var(--win, #22c55e)';
   }
 
   barFill.style.width = `${bufferRemaining}%`;
@@ -541,7 +541,6 @@ function renderTradesList() {
   const listDiv = document.getElementById('trades-list');
   if (!listDiv) return;
 
-  // Apply filters
   let filtered = allTrades.filter(t => {
     const matchesSearch = !currentSearchQuery || 
       (t.pair && t.pair.toLowerCase().includes(currentSearchQuery)) || 
@@ -561,4 +560,5 @@ function renderTradesList() {
   listDiv.innerHTML = filtered.map((t) => {
     const originalIndex = allTrades.indexOf(t);
     const isRunning = t.outcome === 'Running';
-    const key = normalizePairKey(t.p
+    const key = normalizePairKey(t.pair);
+    const currentMktPrice = key && latestMarket[key] && la

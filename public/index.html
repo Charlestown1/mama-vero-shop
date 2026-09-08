@@ -116,8 +116,8 @@
     </div>
   </div>
 
-  <!-- AUTH -->
-  <div id="auth-container" class="card">
+  <!-- AUTH (Hidden by default to prevent flash) -->
+  <div id="auth-container" class="card hidden">
     <div class="tabs">
       <div class="tab active" onclick="switchTab('login')">Login</div>
       <div class="tab" onclick="switchTab('signup')">Sign up</div>
@@ -406,7 +406,7 @@
         </div>
         <div>
           <div class="modal-field-label">Stop loss</div>
-          <div class="modal-field-value num" id="modal-sl">—</div>
+          <div class="modal-field-label num" id="modal-sl">—</div>
         </div>
         <div>
           <div class="modal-field-label">Take profit</div>
