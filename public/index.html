@@ -57,6 +57,27 @@
     margin-top: 10px;
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
+  .file-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    color: var(--text, #f8fafc);
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .file-input::-webkit-file-upload-button {
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid var(--accent, #eab308);
+    color: var(--accent, #eab308);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-right: 10px;
+  }
 </style>
 </head>
 <body>
@@ -205,7 +226,7 @@
       </div>
     </div>
 
-    <!-- COMPACT TRADE ENTRY WITH TAGS & SCREENSHOT -->
+    <!-- COMPACT TRADE ENTRY WITH TAGS & SCREENSHOT FILE UPLOAD -->
     <div class="panel">
       <h3>Log & analyze new trade</h3>
       <p class="panel-sub">Save a setup and get an instant critique from your AI mentor.</p>
@@ -262,8 +283,10 @@
         </div>
 
         <div class="form-group">
-          <label>Chart screenshot image URL</label>
-          <input type="url" id="chartScreenshot" placeholder="https://i.ibb.co/... or image link">
+          <label>Chart screenshot upload</label>
+          <input type="file" id="chartScreenshotInput" accept="image/*" class="file-input">
+          <!-- Hidden input that holds the base64 string for submission -->
+          <input type="hidden" id="chartScreenshot">
         </div>
 
         <div class="form-group">

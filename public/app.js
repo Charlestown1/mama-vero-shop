@@ -206,6 +206,21 @@ function updatePropGuardrails(tradesList) {
   pctDisplay.innerText = `${bufferRemaining}% Buffer`;
 }
 
+// ---------- FEATURE 3: SCREENSHOT FILE UPLOAD HANDLER ----------
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'chartScreenshotInput') {
+    const file = e.target.files[0];
+    const hiddenScreenshotInput = document.getElementById('chartScreenshot');
+    if (file && hiddenScreenshotInput) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        hiddenScreenshotInput.value = reader.result; // Base64 data string
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+});
+
 // ---------- TRADE SUBMISSION ----------
 async function submitTrade(e) {
   e.preventDefault();
@@ -236,6 +251,7 @@ async function submitTrade(e) {
       aiBox.innerText = data.text; 
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
+      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
       loadTrades(); 
     }
     else { aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
