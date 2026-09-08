@@ -78,6 +78,26 @@
     font-weight: 500;
     margin-right: 10px;
   }
+  .filter-bar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+  }
+  .filter-bar input, .filter-bar select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: var(--text, #f8fafc);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .filter-bar input {
+    flex: 1;
+    min-width: 180px;
+  }
 </style>
 </head>
 <body>
@@ -171,6 +191,14 @@
       <div class="stat-card" style="--stat-color: var(--accent);">
         <h4>Current streak</h4>
         <div class="stat-value num" id="stat-streak">—</div>
+      </div>
+      <div class="stat-card" style="--stat-color: var(--accent);">
+        <h4>Avg R:R</h4>
+        <div class="stat-value num" id="stat-avgrr">0.00R</div>
+      </div>
+      <div class="stat-card" style="--stat-color: var(--win);">
+        <h4>Profit factor</h4>
+        <div class="stat-value num" id="stat-profitfactor">0.00</div>
       </div>
     </div>
 
@@ -266,6 +294,15 @@
         </div>
 
         <div class="form-group">
+          <label>Trading session</label>
+          <select id="tradeSession">
+            <option value="London">London</option>
+            <option value="New York">New York</option>
+            <option value="Asian">Asian</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label>Setup & strategy tags</label>
           <div class="strategy-pills" id="strategy-pills-container">
             <div class="strategy-pill" onclick="toggleTag(this)">Fair Value Gap</div>
@@ -302,11 +339,33 @@
       <div id="ai-result" class="ai-box hidden"></div>
     </div>
 
+    <!-- JOURNALED TRADES PANEL WITH SEARCH, FILTERS & CSV EXPORT -->
     <div class="panel">
       <div class="panel-header-row">
         <h3>Your journaled trades</h3>
-        <button onclick="confirmReset()" class="btn danger-btn" style="width:auto; padding:7px 14px; font-size:0.82rem; margin-top:0;">Reset all data</button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button onclick="exportTradesCSV()" class="btn" style="width:auto; padding:7px 14px; font-size:0.82rem; margin-top:0; background: rgba(234, 179, 8, 0.15); border: 1px solid var(--accent, #eab308); color: var(--accent);">Export CSV</button>
+          <button onclick="confirmReset()" class="btn danger-btn" style="width:auto; padding:7px 14px; font-size:0.82rem; margin-top:0;">Reset all data</button>
+        </div>
       </div>
+      
+      <div class="filter-bar" style="margin-top: 15px;">
+        <input type="text" id="tradeSearchInput" placeholder="Search pair or notes...">
+        <select id="outcomeFilterSelect">
+          <option value="All">All Outcomes</option>
+          <option value="Win">Win</option>
+          <option value="Loss">Loss</option>
+          <option value="BreakEven">Break-even</option>
+          <option value="Running">Running</option>
+        </select>
+        <select id="sessionFilterSelect">
+          <option value="All">All Sessions</option>
+          <option value="London">London</option>
+          <option value="New York">New York</option>
+          <option value="Asian">Asian</option>
+        </select>
+      </div>
+
       <div id="trades-list"></div>
     </div>
   </div>

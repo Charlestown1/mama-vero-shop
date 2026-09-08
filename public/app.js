@@ -4,6 +4,16 @@ let marketPollTimer = null;
 let tradesPollTimer = null;
 let latestMarket = {};
 
+// New Filter & Analytics State
+let currentSearchQuery = '';
+let currentOutcomeFilter = 'All';
+let currentSessionFilter = 'All';
+let propAccountConfig = {
+  phase: 'Phase 1',
+  accountSize: 50000,
+  profitTargetPct: 8
+};
+
 const TRACKED = ['GBPUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'USDJPY'];
 
 function switchTab(tab) {
@@ -206,6 +216,115 @@ function updatePropGuardrails(tradesList) {
   pctDisplay.innerText = `${bufferRemaining}% Buffer`;
 }
 
+// ---------- ADVANCED ANALYTICS (PROFIT FACTOR & AVG R:R) ----------
+function computeAdvancedMetrics(tradesList) {
+  let totalGrossProfit = 0;
+  let totalGrossLoss = 0;
+  let riskRewardSum = 0;
+  let validRRCount = 0;
+
+  tradesList.forEach(t => {
+    const entry = Number(t.entry);
+    const sl = Number(t.stopLoss);
+    const tp = Number(t.takeProfit);
+    const exit = Number(t.exit);
+
+    if (!isNaN(entry) && !isNaN(sl) && !isNaN(tp) && entry !== sl) {
+      const risk = Math.abs(entry - sl);
+      const reward = Math.abs(tp - entry);
+      riskRewardSum += (reward / risk);
+      validRRCount++;
+    }
+
+    if (t.outcome === 'Win' && !isNaN(entry) && !isNaN(exit)) {
+      totalGrossProfit += Math.abs(exit - entry);
+    } else if (t.outcome === 'Loss' && !isNaN(entry) && !isNaN(exit)) {
+      totalGrossLoss += Math.abs(exit - entry);
+    }
+  });
+
+  const avgRR = validRRCount > 0 ? (riskRewardSum / validRRCount).toFixed(2) : '0.00';
+  const profitFactor = totalGrossLoss > 0 ? (totalGrossProfit / totalGrossLoss).toFixed(2) : (totalGrossProfit > 0 ? 'Infinite' : '0.00');
+  return { avgRR, profitFactor };
+}
+
+// ---------- TAG-BASED PROFITABILITY BREAKDOWN ----------
+function computeTagBreakdown(tradesList) {
+  const breakdown = {};
+  tradesList.forEach(t => {
+    if (!t.tags || !Array.isArray(t.tags)) return;
+    t.tags.forEach(tag => {
+      if (!breakdown[tag]) breakdown[tag] = { wins: 0, losses: 0, total: 0 };
+      breakdown[tag].total++;
+      if (t.outcome === 'Win') breakdown[tag].wins++;
+      if (t.outcome === 'Loss') breakdown[tag].losses++;
+    });
+  });
+  return breakdown;
+}
+
+// ---------- CSV JOURNAL EXPORT ----------
+function exportTradesCSV() {
+  if (!allTrades || allTrades.length === 0) {
+    alert("No trades available to export.");
+    return;
+  }
+  const headers = ["Pair", "Direction", "Entry", "Exit", "StopLoss", "TakeProfit", "Outcome", "Session", "Tags", "Date"];
+  const rows = allTrades.map(t => [
+    t.pair || '',
+    t.direction || '',
+    t.entry || '',
+    t.exit || '',
+    t.stopLoss || '',
+    t.takeProfit || '',
+    t.outcome || '',
+    t.session || 'London',
+    `"${(t.tags || []).join(', ')}"`,
+    t.createdAt || ''
+  ]);
+
+  let csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `Afamefune_Insights_Journal_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// ---------- SEARCH & FILTER LOGIC ----------
+function filterTrades(tradesList) {
+  return tradesList.filter(t => {
+    const matchesSearch = !currentSearchQuery || 
+      (t.pair && t.pair.toLowerCase().includes(currentSearchQuery.toLowerCase())) || 
+      (t.notes && t.notes.toLowerCase().includes(currentSearchQuery.toLowerCase()));
+    
+    const matchesOutcome = currentOutcomeFilter === 'All' || t.outcome === currentOutcomeFilter;
+    const matchesSession = currentSessionFilter === 'All' || t.session === currentSessionFilter;
+    
+    return matchesSearch && matchesOutcome && matchesSession;
+  });
+}
+
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'tradeSearchInput') {
+    currentSearchQuery = e.target.value.trim();
+    renderTradesList();
+  }
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'outcomeFilterSelect') {
+    currentOutcomeFilter = e.target.value;
+    renderTradesList();
+  }
+  if (e.target && e.target.id === 'sessionFilterSelect') {
+    currentSessionFilter = e.target.value;
+    renderTradesList();
+  }
+});
+
 // ---------- FEATURE 3: SCREENSHOT FILE UPLOAD HANDLER ----------
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'chartScreenshotInput') {
@@ -233,8 +352,9 @@ async function submitTrade(e) {
     takeProfit: document.getElementById('takeProfit').value,
     tradeOutcome: document.getElementById('tradeOutcome').value,
     tradeNotes: document.getElementById('tradeNotes').value,
-    tags: getSelectedTags(),                                                                  // Feature 1
-    chartScreenshot: document.getElementById('chartScreenshot') ? document.getElementById('chartScreenshot').value.trim() : null // Feature 3
+    session: document.getElementById('tradeSession') ? document.getElementById('tradeSession').value : 'London',
+    tags: getSelectedTags(),
+    chartScreenshot: document.getElementById('chartScreenshot') ? document.getElementById('chartScreenshot').value.trim() : null
   };
 
   const aiBox = document.getElementById('ai-result');
@@ -251,7 +371,7 @@ async function submitTrade(e) {
       aiBox.innerText = data.text; 
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
-      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
+      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput'].value = '';
       loadTrades(); 
     }
     else { aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
@@ -265,7 +385,6 @@ async function loadTrades() {
   if (!currentUser) return;
   const res = await fetch('/api/trades');
   const data = await res.json();
-  const listDiv = document.getElementById('trades-list');
 
   if (data.success && data.trades.length > 0) {
     allTrades = [...data.trades].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -273,7 +392,7 @@ async function loadTrades() {
     const total = allTrades.length;
     const wins = allTrades.filter(t => t.outcome === 'Win').length;
     const losses = allTrades.filter(t => t.outcome === 'Loss').length;
-    const decided = wins + losses; // Running & BreakEven excluded, by design
+    const decided = wins + losses;
     const winRate = decided > 0 ? ((wins / decided) * 100).toFixed(1) : '0.0';
 
     document.getElementById('stat-total').innerText = total;
@@ -281,34 +400,16 @@ async function loadTrades() {
     document.getElementById('stat-record').innerText = `${wins}W / ${losses}L`;
     document.getElementById('stat-streak').innerText = computeStreak(allTrades);
 
-    // Update Prop Firm Risk Guardrail visual
+    const metrics = computeAdvancedMetrics(allTrades);
+    const tagBreakdown = computeTagBreakdown(allTrades);
+    
+    const avgRREl = document.getElementById('stat-avgrr');
+    if (avgRREl) avgRREl.innerText = metrics.avgRR + 'R';
+    const pfEl = document.getElementById('stat-profitfactor');
+    if (pfEl) pfEl.innerText = metrics.profitFactor;
+
     updatePropGuardrails(allTrades);
-
-    listDiv.innerHTML = allTrades.map((t, i) => {
-      const isRunning = t.outcome === 'Running';
-      const key = normalizePairKey(t.pair);
-      const liveM = key ? latestMarket[key] : null;
-      const currentDisplay = isRunning
-        ? (liveM && liveM.price !== null && liveM.price !== undefined ? formatMarketPrice(key, liveM.price) : (t.currentPrice ?? '—'))
-        : null;
-
-      const metaLine = isRunning
-        ? `Entry ${fmt(t.entry)} → Current <span id="current-price-${i}" class="num" style="color:var(--running);">${currentDisplay ?? '—'}</span> · ${formatDate(t.createdAt)}`
-        : `Entry ${fmt(t.entry)} → Exit ${fmt(t.exit)} · ${formatDate(t.createdAt)}${t.exitReason ? ' · ' + escapeHtml(t.exitReason) : ''}`;
-
-      return `
-        <div class="trade-row" onclick="openModal(${i})">
-          <div class="trade-row-left">
-            <span class="trade-dir-pill ${t.direction === 'Sell' ? 'sell' : 'buy'}">${t.direction === 'Sell' ? 'SELL' : 'BUY'}</span>
-            <div class="trade-row-info">
-              <div class="trade-pair">${escapeHtml(t.pair)}</div>
-              <div class="trade-meta">${metaLine}</div>
-            </div>
-          </div>
-          <span class="trade-outcome-tag ${t.outcome}">${labelOutcome(t.outcome)}</span>
-        </div>
-      `;
-    }).join('');
+    renderTradesList();
   } else {
     allTrades = [];
     document.getElementById('stat-total').innerText = 0;
@@ -316,8 +417,49 @@ async function loadTrades() {
     document.getElementById('stat-record').innerText = '0W / 0L';
     document.getElementById('stat-streak').innerText = '—';
     updatePropGuardrails([]);
-    listDiv.innerHTML = '<div class="empty-state">No trades journaled yet — log your first setup above.</div>';
+    const listDiv = document.getElementById('trades-list');
+    if (listDiv) listDiv.innerHTML = '<div class="empty-state">No trades journaled yet — log your first setup above.</div>';
   }
+}
+
+function renderTradesList() {
+  const listDiv = document.getElementById('trades-list');
+  if (!listDiv) return;
+
+  const filtered = filterTrades(allTrades);
+
+  if (filtered.length === 0) {
+    listDiv.innerHTML = '<div class="empty-state">No trades match your active filters.</div>';
+    return;
+  }
+
+  listDiv.innerHTML = filtered.map((t) => {
+    const originalIndex = allTrades.findIndex(item => item === t);
+    const isRunning = t.outcome === 'Running';
+    const key = normalizePairKey(t.pair);
+    const liveM = key ? latestMarket[key] : null;
+    const currentDisplay = isRunning
+      ? (liveM && liveM.price !== null && liveM.price !== undefined ? formatMarketPrice(key, liveM.price) : (t.currentPrice ?? '—'))
+      : null;
+
+    const sessionTag = t.session ? ` · <span style="color:var(--accent);">${t.session}</span>` : '';
+    const metaLine = isRunning
+      ? `Entry ${fmt(t.entry)} → Current <span id="current-price-${originalIndex}" class="num" style="color:var(--running);">${currentDisplay ?? '—'}</span>${sessionTag} · ${formatDate(t.createdAt)}`
+      : `Entry ${fmt(t.entry)} → Exit ${fmt(t.exit)}${sessionTag} · ${formatDate(t.createdAt)}${t.exitReason ? ' · ' + escapeHtml(t.exitReason) : ''}`;
+
+    return `
+      <div class="trade-row" onclick="openModal(${originalIndex})">
+        <div class="trade-row-left">
+          <span class="trade-dir-pill ${t.direction === 'Sell' ? 'sell' : 'buy'}">${t.direction === 'Sell' ? 'SELL' : 'BUY'}</span>
+          <div class="trade-row-info">
+            <div class="trade-pair">${escapeHtml(t.pair)}</div>
+            <div class="trade-meta">${metaLine}</div>
+          </div>
+        </div>
+        <span class="trade-outcome-tag ${t.outcome}">${labelOutcome(t.outcome)}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 function computeStreak(sortedTrades) {
@@ -361,93 +503,29 @@ function escapeHtml(str) {
 function openModal(index) {
   const t = allTrades[index];
   if (!t) return;
-  document.getElementById('modal-pair').innerText = t.pair;
-  document.getElementById('modal-direction').innerText = t.direction || 'N/A';
+  
+  const pairEl = document.getElementById('modal-pair');
+  if (pairEl) pairEl.innerText = t.pair;
+
+  const dirEl = document.getElementById('modal-direction');
+  if (dirEl) dirEl.innerText = t.direction || 'N/A';
+
   const outcomeEl = document.getElementById('modal-outcome');
-  outcomeEl.innerText = labelOutcome(t.outcome);
-  outcomeEl.style.color = t.outcome === 'Win' ? 'var(--win)' : t.outcome === 'Loss' ? 'var(--loss)' : t.outcome === 'Running' ? 'var(--running)' : 'var(--text)';
-  document.getElementById('modal-entry').innerText = fmt(t.entry);
-  document.getElementById('modal-exit').innerText = fmt(t.exit);
-  document.getElementById('modal-sl').innerText = fmt(t.stopLoss);
-  document.getElementById('modal-tp').innerText = fmt(t.takeProfit);
-  document.getElementById('modal-date').innerText = formatDate(t.createdAt);
-  document.getElementById('modal-notes').innerText = t.notes && t.notes.trim() ? t.notes : 'No notes recorded.';
-
-  // Feature 1: Render Strategy Tags in Modal
-  const tagsContainer = document.getElementById('modal-tags-container');
-  if (tagsContainer) {
-    if (t.tags && t.tags.length > 0) {
-      tagsContainer.innerHTML = `<div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:6px;">Setup Tags</div><div class="strategy-pills">${t.tags.map(tag => `<div class="strategy-pill active" style="cursor:default;">${escapeHtml(tag)}</div>`).join('')}</div>`;
-    } else {
-      tagsContainer.innerHTML = '';
-    }
+  if (outcomeEl) {
+    outcomeEl.innerText = labelOutcome(t.outcome);
+    outcomeEl.style.color = t.outcome === 'Win' ? 'var(--win)' : t.outcome === 'Loss' ? 'var(--loss)' : t.outcome === 'Running' ? 'var(--running)' : 'var(--text)';
   }
 
-  // Feature 3: Render Chart Screenshot in Modal
-  const screenshotContainer = document.getElementById('modal-screenshot-container');
-  if (screenshotContainer) {
-    if (t.chartScreenshot) {
-      screenshotContainer.innerHTML = `
-        <div class="modal-field-label" style="margin-top:12px;">Chart Screenshot Attachment</div>
-        <a href="${escapeHtml(t.chartScreenshot)}" target="_blank">
-          <img src="${escapeHtml(t.chartScreenshot)}" class="screenshot-preview" alt="Chart Setup Screenshot">
-        </a>
-      `;
-    } else {
-      screenshotContainer.innerHTML = '';
-    }
-  }
+  const entryEl = document.getElementById('modal-entry');
+  if (entryEl) entryEl.innerText = fmt(t.entry);
 
-  const currentWrap = document.getElementById('modal-current-wrap');
-  const reasonWrap = document.getElementById('modal-reason-wrap');
+  const exitEl = document.getElementById('modal-exit');
+  if (exitEl) exitEl.innerText = fmt(t.exit);
 
-  if (t.outcome === 'Running') {
-    const key = normalizePairKey(t.pair);
-    const liveM = key ? latestMarket[key] : null;
-    const currentPrice = liveM && liveM.price !== null && liveM.price !== undefined ? formatMarketPrice(key, liveM.price) : (t.currentPrice ?? 'N/A');
-    document.getElementById('modal-current').innerText = currentPrice;
-    currentWrap.classList.remove('hidden');
-    reasonWrap.classList.add('hidden');
-  } else if (t.exitReason) {
-    document.getElementById('modal-reason').innerText = t.exitReason;
-    reasonWrap.classList.remove('hidden');
-    currentWrap.classList.add('hidden');
-  } else {
-    currentWrap.classList.add('hidden');
-    reasonWrap.classList.add('hidden');
-  }
+  const slEl = document.getElementById('modal-sl');
+  if (slEl) slEl.innerText = fmt(t.stopLoss);
 
-  document.getElementById('trade-modal').classList.remove('hidden');
-}
+  const tpEl = document.getElementById('modal-tp');
+  if (tpEl) tpEl.innerText = fmt(t.takeProfit);
 
-function closeModal() {
-  document.getElementById('trade-modal').classList.add('hidden');
-}
-
-function closeModalOnOverlay(e) {
-  if (e.target.id === 'trade-modal') closeModal();
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
-});
-
-async function confirmReset() {
-  const confirmation = prompt("Are you sure you want to reset all data and clear your win/loss rates back to zero?\nType 'yes' to confirm:");
-  if (confirmation && confirmation.trim().toLowerCase() === 'yes') {
-    try {
-      const res = await fetch('/api/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-      const data = await res.json();
-      if (data.success) { loadTrades(); alert("All data has been reset successfully."); }
-      else { alert("Reset failed: " + (data.message || "unknown error")); }
-    } catch (err) { alert("Reset failed: " + err.message); }
-  }
-}
-
-async function logout() {
-  if (marketPollTimer) clearInterval(marketPollTimer);
-  if (tradesPollTimer) clearInterval(tradesPollTimer);
-  window.location.href = '/auth/logout';
-}
-
-checkAuth();
+  const sessionEl = document

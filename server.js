@@ -69,8 +69,9 @@ const tradeSchema = new mongoose.Schema({
   takeProfit: Number,
   outcome: { type: String, default: 'Running' }, // 'Win' | 'Loss' | 'BreakEven' | 'Running'
   notes: String,
-  tags: { type: [String], default: [] },               // Feature 1: Strategy Tagging
-  chartScreenshot: { type: String, default: null },    // Feature 3: Chart Screenshot Attachment
+  session: { type: String, default: 'London' },         // Session Tracking (London, New York, Asian)
+  tags: { type: [String], default: [] },               // Strategy Tagging
+  chartScreenshot: { type: String, default: null },    // Chart Screenshot Attachment
   exitReason: { type: String, default: null }, // 'Take Profit' | 'Stop Loss' | 'Manual'
   currentPrice: { type: Number, default: null },
   lastPriceUpdate: { type: Date, default: null },
@@ -385,7 +386,7 @@ function computeRiskReward(direction, entry, sl, tp) {
 app.post('/api/analyze', requireAuth, async (req, res) => {
   let savedTrade;
   try {
-    const { currencyPair, tradeDirection, entryPrice, exitPrice, stopLoss, takeProfit, tradeOutcome, tradeNotes, tags, chartScreenshot } = req.body;
+    const { currencyPair, tradeDirection, entryPrice, exitPrice, stopLoss, takeProfit, tradeOutcome, tradeNotes, tags, chartScreenshot, session } = req.body;
 
     if (!currencyPair || !tradeDirection || !entryPrice) {
       return res.status(400).json({ success: false, message: 'Pair, direction, and entry price are required.' });
@@ -404,6 +405,7 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
       takeProfit: takeProfit !== '' && takeProfit !== undefined ? parseFloat(takeProfit) : undefined,
       outcome: tradeOutcome || 'Running',
       notes: tradeNotes,
+      session: session || 'London',
       tags: Array.isArray(tags) ? tags : [],
       chartScreenshot: chartScreenshot || null,
       exitReason: tradeOutcome === 'Win' || tradeOutcome === 'Loss' ? 'Manual' : null,
@@ -422,11 +424,13 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
       : 'Risk/reward could not be calculated (missing stop loss or take profit).';
 
     const tagsLine = savedTrade.tags && savedTrade.tags.length > 0 ? savedTrade.tags.join(', ') : 'None';
+    const sessionLine = savedTrade.session || 'London';
 
     const prompt = `You are an elite forex/crypto trading mentor. Analyze this trade using ONLY the information given — do not invent details.
 
 - Pair: ${savedTrade.pair}
 - Direction: ${savedTrade.direction}
+- Trading Session: ${sessionLine}
 - Entry Price: ${savedTrade.entry ?? 'Not provided'}
 - Exit Price: ${savedTrade.exit ?? 'Active / not yet closed'}
 - Stop Loss: ${savedTrade.stopLoss ?? 'Not set'}
@@ -436,7 +440,7 @@ app.post('/api/analyze', requireAuth, async (req, res) => {
 - ${rrLine}
 - Trader's Thesis/Notes: "${savedTrade.notes || 'None provided'}"
 
-Give a professional critique covering: logical consistency of the setup, evaluation of the strategy tags used, whether the stop/target placement matches the thesis, potential weaknesses, and 2-3 concrete lessons. Be direct and concise.`;
+Give a professional critique covering: logical consistency of market session timing, setup evaluation of strategy tags used, whether stop/target placement matches the thesis, potential weaknesses, and 2-3 concrete lessons. Be direct and concise.`;
 
     const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const result = await model.generateContent(prompt);
