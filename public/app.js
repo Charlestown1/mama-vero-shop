@@ -4,28 +4,65 @@ let marketPollTimer = null;
 let tradesPollTimer = null;
 let latestMarket = {};
 
-// New Filter & Analytics State
 let currentSearchQuery = '';
 let currentOutcomeFilter = 'All';
 let currentSessionFilter = 'All';
-let propAccountConfig = {
-  phase: 'Phase 1',
-  accountSize: 50000,
-  profitTargetPct: 8
-};
 
 const TRACKED = ['GBPUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'USDJPY'];
 
+// ---------- SAFE EVENT BINDING ON LOAD ----------
+document.addEventListener('DOMContentLoaded', () => {
+  setupTabs();
+  setupForms();
+  checkAuth();
+});
+
+function setupTabs() {
+  const loginTabBtn = document.getElementById('tab-login-btn');
+  const signupTabBtn = document.getElementById('tab-signup-btn');
+
+  if (loginTabBtn) {
+    loginTabBtn.addEventListener('click', () => switchTab('login'));
+  }
+  if (signupTabBtn) {
+    signupTabBtn.addEventListener('click', () => switchTab('signup'));
+  }
+}
+
+function setupForms() {
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLogin);
+  }
+
+  const signupForm = document.getElementById('signup-form');
+  if (signupForm) {
+    signupForm.addEventListener('submit', handleSignup);
+  }
+
+  const tradeForm = document.getElementById('trade-form');
+  if (tradeForm) {
+    tradeForm.addEventListener('submit', submitTrade);
+  }
+}
+
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('.tab');
+  const loginForm = document.getElementById('login-form');
+  const signupForm = document.getElementById('signup-form');
+
+  if (tabs.length >= 2) {
+    tabs.forEach(t => t.classList.remove('active'));
+  }
+
   if (tab === 'login') {
-    document.querySelectorAll('.tab')[0].classList.add('active');
-    document.getElementById('login-form').classList.remove('hidden');
-    document.getElementById('signup-form').classList.add('hidden');
+    if (tabs[0]) tabs[0].classList.add('active');
+    if (loginForm) loginForm.classList.remove('hidden');
+    if (signupForm) signupForm.classList.add('hidden');
   } else {
-    document.querySelectorAll('.tab')[1].classList.add('active');
-    document.getElementById('signup-form').classList.remove('hidden');
-    document.getElementById('login-form').classList.add('hidden');
+    if (tabs[1]) tabs[1].classList.add('active');
+    if (signupForm) signupForm.classList.remove('hidden');
+    if (loginForm) loginForm.classList.add('hidden');
   }
 }
 
@@ -33,7 +70,7 @@ async function checkAuth() {
   try {
     const res = await fetch('/api/current-user');
     const data = await res.json();
-    if (data.success) {
+    if (data.success && data.user) {
       currentUser = data.user;
       showDashboard();
     }
@@ -42,47 +79,88 @@ async function checkAuth() {
 
 async function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  const res = await fetch('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
-  });
-  const data = await res.json();
-  if (data.success) { currentUser = data.user; showDashboard(); }
-  else { document.getElementById('login-error').innerText = data.message || 'Login failed'; }
+  const emailEl = document.getElementById('login-email');
+  const passwordEl = document.getElementById('login-password');
+  const errorEl = document.getElementById('login-error');
+
+  if (!emailEl || !passwordEl) return;
+
+  const email = emailEl.value.trim();
+  const password = passwordEl.value;
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (data.success) { 
+      currentUser = data.user; 
+      showDashboard(); 
+    } else { 
+      if (errorEl) errorEl.innerText = data.message || 'Login failed'; 
+    }
+  } catch (err) {
+    if (errorEl) errorEl.innerText = 'Network error during login';
+  }
 }
 
 async function handleSignup(e) {
   e.preventDefault();
-  const username = document.getElementById('signup-username').value;
-  const email = document.getElementById('signup-email').value;
-  const password = document.getElementById('signup-password').value;
-  const confirm = document.getElementById('signup-confirm').value;
+  const usernameEl = document.getElementById('signup-username');
+  const emailEl = document.getElementById('signup-email');
+  const passwordEl = document.getElementById('signup-password');
+  const confirmEl = document.getElementById('signup-confirm');
+  const errorEl = document.getElementById('signup-error');
+
+  if (!usernameEl || !emailEl || !passwordEl || !confirmEl) return;
+
+  const username = usernameEl.value.trim();
+  const email = emailEl.value.trim();
+  const password = passwordEl.value;
+  const confirm = confirmEl.value;
+
   if (password !== confirm) {
-    document.getElementById('signup-error').innerText = "Passwords do not match!";
+    if (errorEl) errorEl.innerText = "Passwords do not match!";
     return;
   }
-  const res = await fetch('/api/signup', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password })
-  });
-  const data = await res.json();
-  if (data.success) { currentUser = data.user; showDashboard(); }
-  else { document.getElementById('signup-error').innerText = data.message || 'Signup failed'; }
+
+  try {
+    const res = await fetch('/api/signup', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password })
+    });
+    const data = await res.json();
+    if (data.success) { 
+      currentUser = data.user; 
+      showDashboard(); 
+    } else { 
+      if (errorEl) errorEl.innerText = data.message || 'Signup failed'; 
+    }
+  } catch (err) {
+    if (errorEl) errorEl.innerText = 'Network error during signup';
+  }
 }
 
 function showDashboard() {
-  document.getElementById('auth-container').classList.add('hidden');
-  document.getElementById('dashboard-container').classList.remove('hidden');
-  document.getElementById('welcome-user').innerText = `Welcome, ${currentUser.username}`;
-  document.getElementById('user-email-display').innerText = currentUser.email;
+  const authContainer = document.getElementById('auth-container');
+  const dashContainer = document.getElementById('dashboard-container');
+  const welcomeUser = document.getElementById('welcome-user');
+  const userEmail = document.getElementById('user-email-display');
+
+  if (authContainer) authContainer.classList.add('hidden');
+  if (dashContainer) dashContainer.classList.remove('hidden');
+  if (welcomeUser) welcomeUser.innerText = `Welcome, ${currentUser.username}`;
+  if (userEmail) userEmail.innerText = currentUser.email;
+
   loadTrades();
   fetchMarket();
   if (marketPollTimer) clearInterval(marketPollTimer);
   if (tradesPollTimer) clearInterval(tradesPollTimer);
-  marketPollTimer = setInterval(fetchMarket, 15000); // cheap: reads server memory cache only
-  tradesPollTimer = setInterval(loadTrades, 25000);  // catches server-side TP/SL flips
+  marketPollTimer = setInterval(fetchMarket, 15000); 
+  tradesPollTimer = setInterval(loadTrades, 25000);  
 }
 
 // ---------- LIVE MARKET BOARD ----------
@@ -121,7 +199,8 @@ async function fetchMarket() {
       statusEl.innerHTML = `<span class="dot"></span>${status.toUpperCase()}`;
     });
 
-    document.getElementById('market-updated').innerText = mostRecent ? `Updated ${formatTime(mostRecent)}` : 'Awaiting first update';
+    const updatedEl = document.getElementById('market-updated');
+    if (updatedEl) updatedEl.innerText = mostRecent ? `Updated ${formatTime(mostRecent)}` : 'Awaiting first update';
     updateRunningPrices();
   } catch (err) {
     console.error('Market fetch failed:', err);
@@ -158,7 +237,7 @@ function updateRunningPrices() {
   });
 }
 
-// ---------- FEATURE 1: SETUP & STRATEGY TAGGING ----------
+// ---------- SETUP & STRATEGY TAGS ----------
 function toggleTag(element) {
   element.classList.toggle('active');
 }
@@ -175,7 +254,7 @@ function clearTags() {
   pills.forEach(p => p.classList.remove('active'));
 }
 
-// ---------- FEATURE 2: PROP FIRM RISK & DRAWDOWN GUARDRAILS ----------
+// ---------- PROP FIRM RISK GUARDRAILS ----------
 function updatePropGuardrails(tradesList) {
   const maxDailyRiskDollars = 500; 
   let totalExposedRisk = 0;
@@ -214,7 +293,7 @@ function updatePropGuardrails(tradesList) {
   pctDisplay.innerText = `${bufferRemaining}% Buffer`;
 }
 
-// ---------- ADVANCED ANALYTICS (PROFIT FACTOR & AVG R:R) ----------
+// ---------- ADVANCED ANALYTICS ----------
 function computeAdvancedMetrics(tradesList) {
   let totalGrossProfit = 0;
   let totalGrossLoss = 0;
@@ -246,98 +325,6 @@ function computeAdvancedMetrics(tradesList) {
   return { avgRR, profitFactor };
 }
 
-// ---------- TAG-BASED PROFITABILITY BREAKDOWN ----------
-function computeTagBreakdown(tradesList) {
-  const breakdown = {};
-  tradesList.forEach(t => {
-    if (!t.tags || !Array.isArray(t.tags)) return;
-    t.tags.forEach(tag => {
-      if (!breakdown[tag]) breakdown[tag] = { wins: 0, losses: 0, total: 0 };
-      breakdown[tag].total++;
-      if (t.outcome === 'Win') breakdown[tag].wins++;
-      if (t.outcome === 'Loss') breakdown[tag].losses++;
-    });
-  });
-  return breakdown;
-}
-
-// ---------- CSV JOURNAL EXPORT ----------
-function exportTradesCSV() {
-  if (!allTrades || allTrades.length === 0) {
-    alert("No trades available to export.");
-    return;
-  }
-  const headers = ["Pair", "Direction", "Entry", "Exit", "StopLoss", "TakeProfit", "Outcome", "Session", "Tags", "Date"];
-  const rows = allTrades.map(t => [
-    t.pair || '',
-    t.direction || '',
-    t.entry || '',
-    t.exit || '',
-    t.stopLoss || '',
-    t.takeProfit || '',
-    t.outcome || '',
-    t.session || 'London',
-    `"${(t.tags || []).join(', ')}"`,
-    t.createdAt || ''
-  ]);
-
-  let csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", `Afamefune_Insights_Journal_${new Date().toISOString().slice(0,10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-// ---------- SEARCH & FILTER LOGIC ----------
-function filterTrades(tradesList) {
-  return tradesList.filter(t => {
-    const matchesSearch = !currentSearchQuery || 
-      (t.pair && t.pair.toLowerCase().includes(currentSearchQuery.toLowerCase())) || 
-      (t.notes && t.notes.toLowerCase().includes(currentSearchQuery.toLowerCase()));
-    
-    const matchesOutcome = currentOutcomeFilter === 'All' || t.outcome === currentOutcomeFilter;
-    const matchesSession = currentSessionFilter === 'All' || t.session === currentSessionFilter;
-    
-    return matchesSearch && matchesOutcome && matchesSession;
-  });
-}
-
-document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'tradeSearchInput') {
-    currentSearchQuery = e.target.value.trim();
-    renderTradesList();
-  }
-});
-
-document.addEventListener('change', (e) => {
-  if (e.target && e.target.id === 'outcomeFilterSelect') {
-    currentOutcomeFilter = e.target.value;
-    renderTradesList();
-  }
-  if (e.target && e.target.id === 'sessionFilterSelect') {
-    currentSessionFilter = e.target.value;
-    renderTradesList();
-  }
-});
-
-// ---------- FEATURE 3: SCREENSHOT FILE UPLOAD HANDLER ----------
-document.addEventListener('change', (e) => {
-  if (e.target && e.target.id === 'chartScreenshotInput') {
-    const file = e.target.files[0];
-    const hiddenScreenshotInput = document.getElementById('chartScreenshot');
-    if (file && hiddenScreenshotInput) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        hiddenScreenshotInput.value = reader.result; 
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-});
-
 // ---------- TRADE SUBMISSION ----------
 async function submitTrade(e) {
   e.preventDefault();
@@ -356,8 +343,10 @@ async function submitTrade(e) {
   };
 
   const aiBox = document.getElementById('ai-result');
-  aiBox.classList.remove('hidden');
-  aiBox.innerText = "Analyzing trade setup with AI mentor...";
+  if (aiBox) {
+    aiBox.classList.remove('hidden');
+    aiBox.innerText = "Analyzing trade setup with AI mentor...";
+  }
 
   try {
     const res = await fetch('/api/analyze', {
@@ -366,19 +355,17 @@ async function submitTrade(e) {
     });
     const data = await res.json();
     if (data.success) { 
-      aiBox.innerText = data.text; 
+      if (aiBox) aiBox.innerText = data.text; 
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
-      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
       loadTrades(); 
     }
-    else { aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
+    else { if (aiBox) aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
   } catch (err) {
-    aiBox.innerText = "Network error while saving trade: " + err.message;
+    if (aiBox) aiBox.innerText = "Network error while saving trade: " + err.message;
   }
 }
 
-// ---------- TRADE LIST & STATS ----------
 async function loadTrades() {
   if (!currentUser) return;
   const res = await fetch('/api/trades');
@@ -399,8 +386,6 @@ async function loadTrades() {
     document.getElementById('stat-streak').innerText = computeStreak(allTrades);
 
     const metrics = computeAdvancedMetrics(allTrades);
-    const tagBreakdown = computeTagBreakdown(allTrades);
-    
     const avgRREl = document.getElementById('stat-avgrr');
     if (avgRREl) avgRREl.innerText = metrics.avgRR + 'R';
     const pfEl = document.getElementById('stat-profitfactor');
@@ -424,15 +409,12 @@ function renderTradesList() {
   const listDiv = document.getElementById('trades-list');
   if (!listDiv) return;
 
-  const filtered = filterTrades(allTrades);
-
-  if (filtered.length === 0) {
-    listDiv.innerHTML = '<div class="empty-state">No trades match your active filters.</div>';
+  if (allTrades.length === 0) {
+    listDiv.innerHTML = '<div class="empty-state">No trades journaled yet.</div>';
     return;
   }
 
-  listDiv.innerHTML = filtered.map((t) => {
-    const originalIndex = allTrades.findIndex(item => item === t);
+  listDiv.innerHTML = allTrades.map((t, originalIndex) => {
     const isRunning = t.outcome === 'Running';
     const key = normalizePairKey(t.pair);
     const liveM = key ? latestMarket[key] : null;
@@ -442,8 +424,8 @@ function renderTradesList() {
 
     const sessionTag = t.session ? ` · <span style="color:var(--accent);">${t.session}</span>` : '';
     const metaLine = isRunning
-      ? `Entry ${fmt(t.entry)} → Current <span id="current-price-${originalIndex}" class="num" style="color:var(--running);">${currentDisplay ?? '—'}</span>${sessionTag} · ${formatDate(t.createdAt)}`
-      : `Entry ${fmt(t.entry)} → Exit ${fmt(t.exit)}${sessionTag} · ${formatDate(t.createdAt)}${t.exitReason ? ' · ' + escapeHtml(t.exitReason) : ''}`;
+      ? `Entry ${fmt(t.entry)} → Current <span id="current-price-${originalIndex}" class="num" style="color:var(--running);">${currentDisplay ?? '—'}</span>${sessionTag}`
+      : `Entry ${fmt(t.entry)} → Exit ${fmt(t.exit)}${sessionTag}`;
 
     return `
       <div class="trade-row" onclick="openModal(${originalIndex})">
@@ -470,8 +452,7 @@ function computeStreak(sortedTrades) {
     else break;
   }
   const noun = first === 'Win' ? 'win' : 'loss';
-  const plural = count > 1 ? (first === 'Win' ? 's' : 'es') : '';
-  return `${count} ${noun}${plural}`;
+  return `${count} ${noun}${count > 1 ? 's' : ''}`;
 }
 
 function labelOutcome(o) {
@@ -484,12 +465,6 @@ function fmt(v) {
   return v;
 }
 
-function formatDate(d) {
-  if (!d) return '';
-  const date = new Date(d);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 function escapeHtml(str) {
   if (!str) return '';
   const div = document.createElement('div');
@@ -497,39 +472,20 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- MODAL ----------
 function openModal(index) {
   const t = allTrades[index];
   if (!t) return;
-  
-  const pairEl = document.getElementById('modal-pair');
-  if (pairEl) pairEl.innerText = t.pair;
+  document.getElementById('modal-pair').innerText = t.pair;
+  document.getElementById('modal-direction').innerText = t.direction || 'N/A';
+  document.getElementById('modal-outcome').innerText = labelOutcome(t.outcome);
+  document.getElementById('modal-entry').innerText = fmt(t.entry);
+  document.getElementById('modal-exit').innerText = fmt(t.exit);
+  document.getElementById('modal-sl').innerText = fmt(t.stopLoss);
+  document.getElementById('modal-tp').innerText = fmt(t.takeProfit);
+  document.getElementById('modal-notes').innerText = t.notes || 'No notes recorded.';
+  document.getElementById('trade-modal').classList.remove('hidden');
+}
 
-  const dirEl = document.getElementById('modal-direction');
-  if (dirEl) dirEl.innerText = t.direction || 'N/A';
-
-  const outcomeEl = document.getElementById('modal-outcome');
-  if (outcomeEl) {
-    outcomeEl.innerText = labelOutcome(t.outcome);
-    outcomeEl.style.color = t.outcome === 'Win' ? 'var(--win)' : t.outcome === 'Loss' ? 'var(--loss)' : t.outcome === 'Running' ? 'var(--running)' : 'var(--text)';
-  }
-
-  const entryEl = document.getElementById('modal-entry');
-  if (entryEl) entryEl.innerText = fmt(t.entry);
-
-  const exitEl = document.getElementById('modal-exit');
-  if (exitEl) exitEl.innerText = fmt(t.exit);
-
-  const slEl = document.getElementById('modal-sl');
-  if (slEl) slEl.innerText = fmt(t.stopLoss);
-
-  const tpEl = document.getElementById('modal-tp');
-  if (tpEl) tpEl.innerText = fmt(t.takeProfit);
-
-  const sessionEl = document.getElementById('modal-session');
-  if (sessionEl) sessionEl.innerText = t.session || 'London';
-
-  const tagsEl = document.getElementById('modal-tags');
-  if (tagsEl) {
-    tagsEl.innerHTML = (t.tags && t.tags.length > 0) 
-      ? t.tags.map
+function closeModal() {
+  document.getElementById('trade-modal').classList.add('hidden');
+}
