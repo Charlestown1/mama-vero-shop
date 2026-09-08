@@ -2,6 +2,7 @@ let currentUser = null;
 let allTrades = [];
 let marketPollTimer = null;
 let tradesPollTimer = null;
+let sessionPollTimer = null;
 let latestMarket = {};
 
 let currentSearchQuery = '';
@@ -14,6 +15,7 @@ const TRACKED = ['GBPUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'USDJPY'];
 document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
   setupForms();
+  setupScreenshotHandler();
   checkAuth();
 });
 
@@ -43,6 +45,48 @@ function setupForms() {
   const tradeForm = document.getElementById('trade-form');
   if (tradeForm) {
     tradeForm.addEventListener('submit', submitTrade);
+  }
+
+  // Setup filters if present
+  const searchInput = document.getElementById('tradeSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentSearchQuery = e.target.value.toLowerCase();
+      renderTradesList();
+    });
+  }
+
+  const outcomeSelect = document.getElementById('outcomeFilterSelect');
+  if (outcomeSelect) {
+    outcomeSelect.addEventListener('change', (e) => {
+      currentOutcomeFilter = e.target.value;
+      renderTradesList();
+    });
+  }
+
+  const sessionSelect = document.getElementById('sessionFilterSelect');
+  if (sessionSelect) {
+    sessionSelect.addEventListener('change', (e) => {
+      currentSessionFilter = e.target.value;
+      renderTradesList();
+    });
+  }
+}
+
+function setupScreenshotHandler() {
+  const fileInput = document.getElementById('chartScreenshotInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(uploadEvent) {
+        const base64Val = uploadEvent.target.result;
+        const hiddenInput = document.getElementById('chartScreenshot');
+        if (hiddenInput) hiddenInput.value = base64Val;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 }
 
@@ -144,6 +188,14 @@ async function handleSignup(e) {
   }
 }
 
+async function logout() {
+  try {
+    await fetch('/api/logout', { method: 'POST' });
+  } catch (err) { console.error(err); }
+  currentUser = null;
+  location.reload();
+}
+
 function showDashboard() {
   const authContainer = document.getElementById('auth-container');
   const dashContainer = document.getElementById('dashboard-container');
@@ -157,10 +209,89 @@ function showDashboard() {
 
   loadTrades();
   fetchMarket();
+  updateTradingSessions();
+
   if (marketPollTimer) clearInterval(marketPollTimer);
   if (tradesPollTimer) clearInterval(tradesPollTimer);
+  if (sessionPollTimer) clearInterval(sessionPollTimer);
+
   marketPollTimer = setInterval(fetchMarket, 15000); 
   tradesPollTimer = setInterval(loadTrades, 25000);  
+  sessionPollTimer = setInterval(updateTradingSessions, 1000); // 1-second countdown ticker
+}
+
+// ---------- LIVE FOREX SESSION, WAT CLOCK & COUNTDOWN ----------
+function updateTradingSessions() {
+  const now = new Date();
+  
+  // Get UTC components
+  const utcSec = now.getUTCSeconds();
+  const utcMin = now.getUTCMinutes();
+  const utcHours = now.getUTCHours();
+  
+  // Convert to West Africa Time (WAT = UTC+1). Total seconds from midnight WAT:
+  let totalSecondsToday = (utcHours * 3600 + utcMin * 60 + utcSec + 3600) % 86400;
+  
+  const watHours = Math.floor(totalSecondsToday / 3600) % 24;
+  const watMins = Math.floor((totalSecondsToday % 3600) / 60);
+  const watSecs = totalSecondsToday % 60;
+  
+  const currentWatDecimal = watHours + (watMins / 60) + (watSecs / 3600);
+  const activeSessions = [];
+
+  // Session hours in WAT:
+  // 1. Asian (Tokyo): 01:00 - 10:00 WAT
+  // 2. London: 09:00 - 17:00 WAT
+  // 3. New York: 14:00 - 22:00 WAT
+  if (currentWatDecimal >= 1 && currentWatDecimal < 10) activeSessions.push("🇯🇵 Asian");
+  if (currentWatDecimal >= 9 && currentWatDecimal < 17) activeSessions.push("🇬🇧 London");
+  if (currentWatDecimal >= 14 && currentWatDecimal < 22) activeSessions.push("🇺🇸 New York");
+
+  // Session start times in seconds from midnight WAT
+  const sessionSchedules = [
+    { name: "🇯🇵 Asian", startSec: 1 * 3600 },
+    { name: "🇬🇧 London", startSec: 9 * 3600 },
+    { name: "🇺🇸 New York", startSec: 14 * 3600 }
+  ];
+
+  let nextSessionName = "";
+  let minDiffSeconds = Infinity;
+
+  sessionSchedules.forEach(s => {
+    let diff = s.startSec - totalSecondsToday;
+    if (diff <= 0) {
+      diff += 86400; // If it already started today, countdown targets tomorrow's opening
+    }
+    if (diff < minDiffSeconds) {
+      minDiffSeconds = diff;
+      nextSessionName = s.name;
+    }
+  });
+
+  const cHours = Math.floor(minDiffSeconds / 3600);
+  const cMins = Math.floor((minDiffSeconds % 3600) / 60);
+  const cSecs = minDiffSeconds % 60;
+
+  // Update DOM elements
+  const timeEl = document.getElementById('wat-time-display');
+  const sessionEl = document.getElementById('active-session-display');
+  const countdownEl = document.getElementById('session-countdown');
+
+  if (timeEl) {
+    timeEl.innerText = `${String(watHours).padStart(2, '0')}:${String(watMins).padStart(2, '0')} WAT`;
+  }
+
+  if (sessionEl) {
+    if (activeSessions.length > 0) {
+      sessionEl.innerHTML = activeSessions.map(s => `<span style="background: rgba(243, 156, 18, 0.15); color: var(--accent); padding: 3px 8px; border-radius: 4px; margin-right: 6px; display:inline-block;">${s}</span>`).join(' ');
+    } else {
+      sessionEl.innerHTML = `<span style="color: var(--text-muted);">💤 Inter-session / Market Quiet</span>`;
+    }
+  }
+
+  if (countdownEl) {
+    countdownEl.innerText = `Next: ${nextSessionName} opens in ${String(cHours).padStart(2, '0')}:${String(cMins).padStart(2, '0')}:${String(cSecs).padStart(2, '0')}`;
+  }
 }
 
 // ---------- LIVE MARKET BOARD ----------
@@ -358,6 +489,7 @@ async function submitTrade(e) {
       if (aiBox) aiBox.innerText = data.text; 
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
+      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
       loadTrades(); 
     }
     else { if (aiBox) aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
@@ -409,83 +541,24 @@ function renderTradesList() {
   const listDiv = document.getElementById('trades-list');
   if (!listDiv) return;
 
-  if (allTrades.length === 0) {
-    listDiv.innerHTML = '<div class="empty-state">No trades journaled yet.</div>';
+  // Apply filters
+  let filtered = allTrades.filter(t => {
+    const matchesSearch = !currentSearchQuery || 
+      (t.pair && t.pair.toLowerCase().includes(currentSearchQuery)) || 
+      (t.notes && t.notes.toLowerCase().includes(currentSearchQuery));
+    
+    const matchesOutcome = currentOutcomeFilter === 'All' || t.outcome === currentOutcomeFilter;
+    const matchesSession = currentSessionFilter === 'All' || t.session === currentSessionFilter;
+
+    return matchesSearch && matchesOutcome && matchesSession;
+  });
+
+  if (filtered.length === 0) {
+    listDiv.innerHTML = '<div class="empty-state">No matching trades found.</div>';
     return;
   }
 
-  listDiv.innerHTML = allTrades.map((t, originalIndex) => {
+  listDiv.innerHTML = filtered.map((t) => {
+    const originalIndex = allTrades.indexOf(t);
     const isRunning = t.outcome === 'Running';
-    const key = normalizePairKey(t.pair);
-    const liveM = key ? latestMarket[key] : null;
-    const currentDisplay = isRunning
-      ? (liveM && liveM.price !== null && liveM.price !== undefined ? formatMarketPrice(key, liveM.price) : (t.currentPrice ?? '—'))
-      : null;
-
-    const sessionTag = t.session ? ` · <span style="color:var(--accent);">${t.session}</span>` : '';
-    const metaLine = isRunning
-      ? `Entry ${fmt(t.entry)} → Current <span id="current-price-${originalIndex}" class="num" style="color:var(--running);">${currentDisplay ?? '—'}</span>${sessionTag}`
-      : `Entry ${fmt(t.entry)} → Exit ${fmt(t.exit)}${sessionTag}`;
-
-    return `
-      <div class="trade-row" onclick="openModal(${originalIndex})">
-        <div class="trade-row-left">
-          <span class="trade-dir-pill ${t.direction === 'Sell' ? 'sell' : 'buy'}">${t.direction === 'Sell' ? 'SELL' : 'BUY'}</span>
-          <div class="trade-row-info">
-            <div class="trade-pair">${escapeHtml(t.pair)}</div>
-            <div class="trade-meta">${metaLine}</div>
-          </div>
-        </div>
-        <span class="trade-outcome-tag ${t.outcome}">${labelOutcome(t.outcome)}</span>
-      </div>
-    `;
-  }).join('');
-}
-
-function computeStreak(sortedTrades) {
-  const decided = sortedTrades.filter(t => t.outcome === 'Win' || t.outcome === 'Loss');
-  if (decided.length === 0) return '—';
-  const first = decided[0].outcome;
-  let count = 0;
-  for (const t of decided) {
-    if (t.outcome === first) count++;
-    else break;
-  }
-  const noun = first === 'Win' ? 'win' : 'loss';
-  return `${count} ${noun}${count > 1 ? 's' : ''}`;
-}
-
-function labelOutcome(o) {
-  if (o === 'BreakEven') return 'Break-even';
-  return o;
-}
-
-function fmt(v) {
-  if (v === null || v === undefined || v === '') return 'N/A';
-  return v;
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.innerText = str;
-  return div.innerHTML;
-}
-
-function openModal(index) {
-  const t = allTrades[index];
-  if (!t) return;
-  document.getElementById('modal-pair').innerText = t.pair;
-  document.getElementById('modal-direction').innerText = t.direction || 'N/A';
-  document.getElementById('modal-outcome').innerText = labelOutcome(t.outcome);
-  document.getElementById('modal-entry').innerText = fmt(t.entry);
-  document.getElementById('modal-exit').innerText = fmt(t.exit);
-  document.getElementById('modal-sl').innerText = fmt(t.stopLoss);
-  document.getElementById('modal-tp').innerText = fmt(t.takeProfit);
-  document.getElementById('modal-notes').innerText = t.notes || 'No notes recorded.';
-  document.getElementById('trade-modal').classList.remove('hidden');
-}
-
-function closeModal() {
-  document.getElementById('trade-modal').classList.add('hidden');
-}
+    const key = normalizePairKey(t.p
