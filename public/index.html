@@ -402,23 +402,25 @@
           <div class="modal-field-label">Take profit</div>
           <div class="modal-field-value num" id="modal-tp">—</div>
         </div>
-        <div id="modal-current-wrap" class="hidden">
-          <div class="modal-field-label">Current price</div>
-          <div class="modal-field-value num" id="modal-current" style="color:var(--running);">—</div>
-        </div>
-        <div id="modal-reason-wrap" class="hidden">
-          <div class="modal-field-label">Exit reason</div>
-          <div class="modal-field-value" id="modal-reason">—</div>
-        </div>
-        <div>
-          <div class="modal-field-label">Date logged</div>
-          <div class="modal-field-value" id="modal-date">—</div>
-        </div>
       </div>
-      <div id="modal-tags-container" style="margin-top: 15px;"></div>
+
+      <div style="margin-top: 15px;">
+        <div class="modal-field-label">Session</div>
+        <div class="modal-field-value" id="modal-session">London</div>
+      </div>
+
+      <div style="margin-top: 15px;">
+        <div class="modal-field-label">Strategy Tags</div>
+        <div class="modal-field-value" id="modal-tags">None</div>
+      </div>
+
       <div class="modal-notes-label" style="margin-top: 15px;">Trade notes / thesis</div>
       <div class="modal-notes" id="modal-notes">No notes recorded.</div>
-      <div id="modal-screenshot-container" style="margin-top: 15px;"></div>
+      
+      <div id="modal-screenshot-container" class="hidden" style="margin-top: 15px;">
+        <div class="modal-field-label" style="margin-bottom: 6px;">Chart Screenshot</div>
+        <img id="modal-screenshot-img" class="screenshot-preview" alt="Chart Setup Screenshot">
+      </div>
     </div>
   </div>
 
