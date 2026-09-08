@@ -13,14 +13,10 @@ const TRACKED = ['GBPUSD', 'USDCAD', 'XAUUSD', 'BTCUSD', 'USDJPY'];
 
 // ---------- SAFE EVENT BINDING ON LOAD ----------
 document.addEventListener('DOMContentLoaded', () => {
-  // Each setup step is isolated so a failure in one can never block auth
-  // from resolving and revealing a screen to the user.
   try { setupTabs(); } catch (e) { console.error('setupTabs failed:', e); }
   try { setupForms(); } catch (e) { console.error('setupForms failed:', e); }
   try { setupScreenshotHandler(); } catch (e) { console.error('setupScreenshotHandler failed:', e); }
 
-  // Hard failsafe: no matter what goes wrong above or in checkAuth(),
-  // the user is never left staring at a blank page.
   const failsafeTimer = setTimeout(() => {
     const auth = document.getElementById('auth-container');
     const dash = document.getElementById('dashboard-container');
@@ -125,7 +121,7 @@ function switchTab(tab) {
   }
 }
 
-// ---------- AUTH CHECK (now with a timeout so it can never hang forever) ----------
+// ---------- AUTH CHECK ----------
 async function checkAuth() {
   const authContainer = document.getElementById('auth-container');
   const controller = new AbortController();
@@ -145,7 +141,6 @@ async function checkAuth() {
     console.error('checkAuth failed or timed out:', err);
   }
 
-  // Not authenticated, or the check failed/timed out — either way, show login.
   if (authContainer) authContainer.classList.remove('hidden');
 }
 
@@ -216,7 +211,6 @@ async function handleSignup(e) {
   }
 }
 
-// FIXED: your server exposes GET /auth/logout, not POST /api/logout.
 async function logout() {
   if (marketPollTimer) clearInterval(marketPollTimer);
   if (tradesPollTimer) clearInterval(tradesPollTimer);
@@ -518,35 +512,42 @@ async function submitTrade(e) {
   }
 }
 
+// ---------- LOAD TRADES & STATISTICS ----------
 async function loadTrades() {
   if (!currentUser) return;
-  const res = await fetch('/api/trades');
-  const data = await res.json();
+  try {
+    const res = await fetch('/api/trades');
+    const data = await res.json();
 
-  if (data.success && data.trades.length > 0) {
-    allTrades = [...data.trades].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (data.success && data.trades) {
+      allTrades = [...data.trades].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    const total = allTrades.length;
-    const wins = allTrades.filter(t => t.outcome === 'Win').length;
-    const losses = allTrades.filter(t => t.outcome === 'Loss').length;
-    const decided = wins + losses;
-    const winRate = decided > 0 ? ((wins / decided) * 100).toFixed(1) : '0.0';
+      const total = allTrades.length;
+      const wins = allTrades.filter(t => t.outcome === 'Win').length;
+      const losses = allTrades.filter(t => t.outcome === 'Loss').length;
+      const decided = wins + losses;
+      const winRate = decided > 0 ? ((wins / decided) * 100).toFixed(1) : '0.0';
 
-    document.getElementById('stat-total').innerText = total;
-    document.getElementById('stat-winrate').innerText = winRate + '%';
-    document.getElementById('stat-record').innerText = `${wins}W / ${losses}L`;
-    document.getElementById('stat-streak').innerText = computeStreak(allTrades);
+      const statTotal = document.getElementById('stat-total');
+      const statWinrate = document.getElementById('stat-winrate');
+      const statRecord = document.getElementById('stat-record');
+      const statStreak = document.getElementById('stat-streak');
 
-    const metrics = computeAdvancedMetrics(allTrades);
-    const avgRREl = document.getElementById('stat-avgrr');
-    if (avgRREl) avgRREl.innerText = metrics.avgRR + 'R';
-    const pfEl = document.getElementById('stat-profitfactor');
-    if (pfEl) pfEl.innerText = metrics.profitFactor;
+      if (statTotal) statTotal.innerText = total;
+      if (statWinrate) statWinrate.innerText = winRate + '%';
+      if (statRecord) statRecord.innerText = `${wins}W / ${losses}L`;
+      if (statStreak) statStreak.innerText = computeStreak(allTrades);
 
-    updatePropGuardrails(allTrades);
-    renderTradesList();
-  } else {
-    allTrades = [];
-    document.getElementById('stat-total').innerText = 0;
-    document.getElementById('stat-winrate').innerText = '0.0%';
-    document.getElementById
+      const metrics = computeAdvancedMetrics(allTrades);
+      const avgRREl = document.getElementById('stat-avgrr');
+      if (avgRREl) avgRREl.innerText = metrics.avgRR + 'R';
+      const pfEl = document.getElementById('stat-profitfactor');
+      if (pfEl) pfEl.innerText = metrics.profitFactor;
+
+      updatePropGuardrails(allTrades);
+      renderTradesList();
+    } else {
+      allTrades = [];
+      if (document.getElementById('stat-total')) document.getElementById('stat-total').innerText = 0;
+      if (document.getElementById('stat-winrate')) document.getElementById('stat-winrate').innerText = '0.0%';
+      if (document.getElementById('stat-record')) document.getElementById('stat-recor
