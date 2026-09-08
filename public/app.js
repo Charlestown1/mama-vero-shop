@@ -147,8 +147,6 @@ function normalizePairKey(raw) {
   return TRACKED.includes(k) ? k : null;
 }
 
-// Lightweight patch of "current price" text on already-rendered Running rows,
-// without re-fetching trades or re-rendering the whole list every 15s.
 function updateRunningPrices() {
   allTrades.forEach((t, i) => {
     if (t.outcome !== 'Running') return;
@@ -179,13 +177,13 @@ function clearTags() {
 
 // ---------- FEATURE 2: PROP FIRM RISK & DRAWDOWN GUARDRAILS ----------
 function updatePropGuardrails(tradesList) {
-  const maxDailyRiskDollars = 500; // Standard evaluation baseline limit
+  const maxDailyRiskDollars = 500; 
   let totalExposedRisk = 0;
 
   tradesList.forEach(t => {
     if (t.outcome === 'Running' && t.entry && t.stopLoss) {
       const riskPerUnit = Math.abs(Number(t.entry) - Number(t.stopLoss));
-      totalExposedRisk += riskPerUnit * 100; // Estimated unit sizing mapping
+      totalExposedRisk += riskPerUnit * 100; 
     }
   });
 
@@ -333,7 +331,7 @@ document.addEventListener('change', (e) => {
     if (file && hiddenScreenshotInput) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        hiddenScreenshotInput.value = reader.result; // Base64 data string
+        hiddenScreenshotInput.value = reader.result; 
       };
       reader.readAsDataURL(file);
     }
@@ -371,7 +369,7 @@ async function submitTrade(e) {
       aiBox.innerText = data.text; 
       clearTags();
       if (document.getElementById('chartScreenshot')) document.getElementById('chartScreenshot').value = '';
-      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput'].value = '';
+      if (document.getElementById('chartScreenshotInput')) document.getElementById('chartScreenshotInput').value = '';
       loadTrades(); 
     }
     else { aiBox.innerText = "Error analyzing trade: " + (data.message || 'unknown error'); }
@@ -528,4 +526,10 @@ function openModal(index) {
   const tpEl = document.getElementById('modal-tp');
   if (tpEl) tpEl.innerText = fmt(t.takeProfit);
 
-  const sessionEl = document
+  const sessionEl = document.getElementById('modal-session');
+  if (sessionEl) sessionEl.innerText = t.session || 'London';
+
+  const tagsEl = document.getElementById('modal-tags');
+  if (tagsEl) {
+    tagsEl.innerHTML = (t.tags && t.tags.length > 0) 
+      ? t.tags.map
