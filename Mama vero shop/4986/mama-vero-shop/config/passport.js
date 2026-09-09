@@ -25,7 +25,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL,
+        callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
+        proxy: true // Required for Render to enforce HTTPS in the callback URL
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
